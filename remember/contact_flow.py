@@ -6,7 +6,7 @@ import os
 import threading
 import time
 from .delivery import DeliveryService
-from .socials import lookup_social
+from .socials import lookup_social, confirmed_profile
 from .profile_photo import fetch_profile_photo
 from .vcard import render_contact
 
@@ -115,8 +115,10 @@ class ContactFlow:
             if os.environ.get('REMEMBER_SOCIAL_LOOKUP', '1') == '1':
                 progress("social", {"status": "active"})
                 lookup_errors = []
-                social = self.lookup(current, on_error=lookup_errors.append) if self.lookup is lookup_social else self.lookup(current)
-                progress("social", {"status": "error", "error": lookup_errors[0]} if lookup_errors else {"status": "done" if social else "skipped", "detail": "LinkedIn match found in search sources." if social else "No confident LinkedIn match returned."})
+                rejections = []
+                remembered = confirmed_profile(current, self.session.store.list_people()) if self.lookup is lookup_social else ''
+                social = remembered or (self.lookup(current, on_error=lookup_errors.append, on_rejection=rejections.append) if self.lookup is lookup_social else self.lookup(current))
+                progress("social", {"status": "error", "error": lookup_errors[0]} if lookup_errors else {"status": "done" if social else "skipped", "detail": ("Matched a previously confirmed contact using two shared identity clues." if remembered else "LinkedIn match found in search sources.") if social else (rejections[-1] if rejections else "No confident LinkedIn match returned.")})
             else:
                 progress("social", {"status": "disabled"})
             # Re-read after enrichment so a user edit wins over the original
