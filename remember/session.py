@@ -281,6 +281,11 @@ class Session:
 
     def _status(self) -> dict:
         current = self.splitter.open
+        utterances = []
+        if current is not None:
+            utterances = [{"speaker": who, "text": text, "final": True} for who, text in self.speaker_lines]
+            if current.partial.strip():
+                utterances.append({"speaker": self.partial_speaker, "text": current.partial.strip(), "final": False})
         return {
             "band": self.band_label,
             "sim": self.sim,
@@ -289,7 +294,8 @@ class Session:
             "note": self.error or self.note,
             "error": self.error,
             "phase": "processing" if self.processing else "talking" if current is not None else "idle",
-            "speakers": sorted({who for who, _ in self.speaker_lines if who is not None}),
+            "speakers": sorted({turn["speaker"] for turn in utterances if turn["speaker"] is not None}),
+            "utterances": utterances,
             "wearer_speaker": self.wearer_speaker,
             "transcript": current.transcript() if current is not None else "",
             "moments": [moment.text for moment in current.moments] if current is not None else [],

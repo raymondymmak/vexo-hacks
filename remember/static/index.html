@@ -108,9 +108,16 @@
     }
     #transcript {
       min-height: 96px;
-      white-space: pre-wrap;
-      margin: 8px 0;
+      display: flex; flex-direction: column; gap: 10px;
+      max-height: 420px; overflow-y: auto; margin: 12px 0; padding: 4px;
     }
+    .turn { align-self: flex-start; max-width: 88%; border: 1px solid #d9e2f0; border-left: 4px solid var(--speaker-color, #64748b); border-radius: 14px; background: #f1f5fb; padding: 10px 13px; }
+    .turn.you { align-self: flex-end; background: var(--green-soft); border-color: #b5d9bd; --speaker-color: var(--green); }
+    .turn.unknown { background: #f4f4f3; border-color: #d4d4d4; }
+    .turn.interim { border-style: dashed; opacity: .8; }
+    .turn-label { font-size: 12px; font-weight: 700; color: var(--speaker-color, #64748b); margin-bottom: 4px; }
+    .turn-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+    .turn-hint { font-size: 11px; margin-top: 5px; color: var(--muted); }
     #moments { list-style: none; padding: 0; margin: 0 0 12px; }
     #moments li {
       background: var(--green-soft);
@@ -227,7 +234,7 @@
           <label for="wearer">Which speaker is you?</label>
           <select id="wearer"><option value="">Not identified</option></select>
           <p class="meta">Choose your speaker before ending to attribute promises. Uncertain details need review.</p>
-          <p id="transcript"></p>
+          <div id="transcript" role="log" aria-label="Live conversation" aria-live="polite"></div>
           <ul id="moments"></ul>
           <label for="line-speaker">Speaker for typed line</label>
           <input id="line-speaker" type="text" placeholder="Optional speaker label, e.g. 0">
@@ -277,6 +284,43 @@
       await refresh();
       return response;
     }
+    function speakerName(speaker) {
+      if (speaker == null) return "Unidentified speaker";
+      const label = String(speaker);
+      return /^\d+$/.test(label) ? "Speaker " + (Number(label) + 1) : "Speaker " + label;
+    }
+    let dialogueSignature = "";
+    function renderDialogue(status) {
+      const turns = status.utterances || (status.transcript ? [{speaker: null, text: status.transcript, final: true}] : []);
+      const signature = JSON.stringify([turns, status.wearer_speaker]);
+      if (signature === dialogueSignature) return;
+      dialogueSignature = signature;
+      const container = $("transcript");
+      const follow = container.scrollHeight - container.scrollTop - container.clientHeight < 70;
+      const oldScroll = container.scrollTop;
+      const groups = [];
+      for (const turn of turns) {
+        if (!turn.text) continue;
+        const prior = groups[groups.length - 1];
+        if (prior && prior.speaker === turn.speaker && prior.final && turn.final) prior.text += " " + turn.text;
+        else groups.push({...turn});
+      }
+      container.replaceChildren();
+      if (!groups.length) container.append(el("p", "meta", "Dialogue will appear here as people speak. Speaker labels are detected automatically; choose which one is you."));
+      for (const turn of groups) {
+        const mine = turn.speaker != null && status.wearer_speaker != null && String(turn.speaker) === String(status.wearer_speaker);
+        const bubble = el("div", "turn" + (mine ? " you" : turn.speaker == null ? " unknown" : "") + (!turn.final ? " interim" : ""));
+        if (!mine && turn.speaker != null) {
+          const hash = Array.from(String(turn.speaker)).reduce((n, ch) => n * 31 + ch.charCodeAt(0), 0) >>> 0;
+          bubble.style.setProperty("--speaker-color", ["#4869a9", "#8b51a3", "#a15b2b", "#247c86"][hash % 4]);
+        }
+        bubble.append(el("div", "turn-label", mine ? "You · " + speakerName(turn.speaker) : speakerName(turn.speaker)));
+        bubble.append(el("p", "turn-text", turn.text));
+        if (!turn.final) bubble.append(el("div", "turn-hint", "Transcribing…"));
+        container.append(bubble);
+      }
+      container.scrollTop = follow ? container.scrollHeight : oldScroll;
+    }
     function renderStatus(status) {
       if (!status) return;
       currentStatus = status;
@@ -285,12 +329,12 @@
       $("note").textContent = status.note || "Start or double-tap when you're ready. End to prepare a contact.";
       $("phase").textContent = phases[status.phase] || status.phase;
       $("mode").textContent = status.mic_on ? "Live microphone · listening" : (status.extractor === "built-in" || status.sim ? "Offline / simulated capture" : "Microphone off");
-      $("transcript").textContent = status.transcript || "Your conversation will appear here. Tell the other person before recording.";
+      renderDialogue(status);
       $("moments").replaceChildren(...(status.moments || []).filter(Boolean).map(m => el("li", "", m)));
       const selected = status.wearer_speaker == null ? "" : String(status.wearer_speaker);
       const labels = (status.speakers || []).map(s => String(typeof s === "object" ? (s.label ?? s.id) : s));
       if (selected && !labels.includes(selected)) labels.push(selected);
-      $("wearer").replaceChildren(new Option("Not identified", ""), ...labels.map(s => new Option("Speaker " + s, s)));
+      $("wearer").replaceChildren(new Option("Not identified", ""), ...labels.map(s => new Option(speakerName(s), s)));
       $("wearer").value = selected;
       const busy = status.phase === "processing";
       $("new").disabled = busy || status.phase === "talking";
