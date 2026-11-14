@@ -1,6 +1,6 @@
 """Turn a stream of words and taps into one conversation at a time.
 
-Double-tap closes the person you are with and opens the next one.
+Double-tap starts an idle conversation or ends an active one.
 A single tap marks a moment, with the words just before it and the next line.
 """
 
@@ -77,22 +77,22 @@ class Splitter:
     def mark(self) -> str:
         """Single tap: remember the words around this moment. Returns that snippet."""
         if self.open is None:
-            self.open = OpenConversation()
+            return ""
         text = self.open.snippet()
         self.open.moments.append(Moment(text, _now(), pending=True))
         return text
 
-    def double_tap(self):
-        """Close the current person if they said anything, then open the next one.
-
-        Returns the closed conversation, or None when there was nothing to save.
-        """
-        closed = None
-        if self.open is not None and self.open.has_content():
-            closed = self._close()
+    def start(self):
+        """Start only when idle; a handshake never splits an active conversation."""
         if self.open is None:
             self.open = OpenConversation()
-        return closed
+
+    def double_tap(self):
+        """Toggle capture; ending an empty conversation returns None."""
+        if self.open is None:
+            self.start()
+            return None
+        return self.end()
 
     def end(self):
         """Close the current person and leave nobody open. None if it was empty."""

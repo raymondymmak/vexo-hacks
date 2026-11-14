@@ -48,6 +48,7 @@ class PipelineTests(unittest.TestCase):
         self.pipeline = VoicePipeline(self.session, live=False, lines=LINES, bytes_per_line=32)
         self.assertIsInstance(self.pipeline.stt, MockDeepgramSTTService)
         self.pipeline.start()
+        self.session.start()
         for _line in LINES:
             self.pipeline.feed_pcm(b"\x00" * 32)
         self.assertTrue(wait_until(lambda: "Friday" in self.session.state()["status"]["transcript"]))
@@ -58,8 +59,9 @@ class PipelineTests(unittest.TestCase):
         person = self.session.state()["people"][0]
         self.assertEqual(person["name"], "Maya Chen")
         self.assertIn("soil sensor", person["working_on"])
-        self.assertIn("firmware", person["promises"][0]["what"])
-        self.assertTrue(person["key_moments"])
+        self.assertEqual(person["promises"], [])
+        self.assertEqual(person["key_moments"], [])
+        self.assertEqual(person["conversations"][0]["transcript"], "")
         self.assertGreater(self.pipeline.stt.audio_bytes, 0)
         self.assertEqual(self.pipeline.processor.speakers, ["0", "1", "0"])
 
@@ -76,6 +78,7 @@ class PipelineTests(unittest.TestCase):
             self.session, live=False, lines=["Hi, I'm Jordan Hale. I'm building a robotics lab."], bytes_per_line=320
         )
         self.pipeline.start()
+        self.session.start()
         play_pcm(self.pipeline, pcm, chunk=320)
         self.assertTrue(wait_until(lambda: "Jordan Hale" in self.session.state()["status"]["transcript"]))
         self.pipeline.feed_tap("double-tap")

@@ -156,12 +156,30 @@
     }
     .moments { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
     .empty { color: var(--muted); margin: 8px 0 0; }
+    button:disabled { opacity: .5; cursor: default; }
+    button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+    select, textarea, .editor input { width: 100%; padding: 10px 12px; border: 1px solid #d9d0c2; border-radius: 10px; background: white; color: var(--ink); font: inherit; }
+    textarea { min-height: 100px; resize: vertical; }
+    .badge { display: inline-block; border-radius: 20px; padding: 4px 10px; font-size: 12px; background: var(--green-soft); color: var(--green); }
+    #error { background: var(--rust-soft); color: var(--rust); padding: 12px 16px; border-radius: 12px; }
+    .editor { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+    .editor label { margin-top: 10px; }
+    .editor .actions { margin-top: 12px; }
+    .card details > summary { cursor: pointer; color: var(--green); margin-top: 14px; }
+    .card { overflow-wrap: anywhere; }
+    .delivery { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin: 12px 0; background: #f6f3eb; }
+    .delivery-error { color: var(--rust); font-size: 13px; margin: 5px 0; }
+    .social { display: inline-block; margin: 8px 0; color: var(--green); }
+    #line-speaker { margin-bottom: 8px; border-radius: 12px; }
     @media (max-width: 800px) {
       header, .live, .layout { display: block; }
       h1 { font-size: 42px; }
       .actions { margin-top: 12px; }
       .layout { display: block; }
       .now { margin-bottom: 18px; }
+      form[role="search"] { margin-top: 20px; }
+      button { min-height: 44px; }
+      .cards { grid-template-columns: 1fr; }
     }
     @media (prefers-reduced-motion: reduce) {
       .card.is-new { outline: 2px solid var(--green); }
@@ -173,7 +191,7 @@
     <div>
       <p class="eyebrow">Vexo Open</p>
       <h1>Remember</h1>
-      <p class="tag">You remember people. They remember you.</p>
+      <p class="tag">Meet someone. Remember them on your phone.</p>
     </div>
     <form role="search" id="search-form">
       <label for="q">Recall a person or a topic</label>
@@ -187,20 +205,32 @@
         <p id="note"></p>
       </div>
       <div class="actions">
-        <button type="button" id="new" class="primary">New person</button>
+        <button type="button" id="new" class="primary">Start conversation</button>
         <button type="button" id="mark">Mark this</button>
         <button type="button" id="end">End conversation</button>
-        <button type="button" id="demo">Play demo</button>
+        <button type="button" id="discard" class="quiet">Discard capture</button>
+        <button type="button" id="handshake">Simulate handshake</button>
+        <button type="button" id="demo">Play offline demo</button>
         <button type="button" id="reset" class="quiet">Reset demo</button>
       </div>
     </section>
+    <p id="error" role="alert" hidden></p>
     <div class="layout">
       <section class="now">
         <h2>This conversation</h2>
         <div class="panel">
           <p id="phase" class="meta">Idle</p>
+          <p id="mode" class="badge">Connecting</p>
+          <label for="existing-contact">Save this conversation to</label>
+          <select id="existing-contact"><option value="">New person</option></select>
+          <p class="meta">For someone you already know, choose their contact and use End conversation here. Ending with the band saves a separate encounter.</p>
+          <label for="wearer">Which speaker is you?</label>
+          <select id="wearer"><option value="">Not identified</option></select>
+          <p class="meta">Choose your speaker before ending to attribute promises. Uncertain details need review.</p>
           <p id="transcript"></p>
           <ul id="moments"></ul>
+          <label for="line-speaker">Speaker for typed line</label>
+          <input id="line-speaker" type="text" placeholder="Optional speaker label, e.g. 0">
           <form class="say" id="say-form">
             <label class="visually" for="line" style="position:absolute;left:-999px">Add a line</label>
             <input id="line" type="text" placeholder="Type a line they said" maxlength="4000">
@@ -209,140 +239,222 @@
         </div>
       </section>
       <section class="board">
-        <h2>People</h2>
+        <h2>People you met</h2>
+        <p class="meta">End the conversation to send a contact to iCloud and a phone notification when configured. Download a contact file anytime.</p>
         <div id="cards" class="cards" aria-live="polite"></div>
       </section>
     </div>
   </main>
   <script>
-    const statusEl = document.getElementById("status");
-    const noteEl = document.getElementById("note");
-    const phaseEl = document.getElementById("phase");
-    const transcriptEl = document.getElementById("transcript");
-    const momentsEl = document.getElementById("moments");
-    const cardsEl = document.getElementById("cards");
-    const queryEl = document.getElementById("q");
-    let freshId = null;
-
+    const $ = id => document.getElementById(id);
+    const token = new URLSearchParams(location.search).get("token") || "";
+    const drafts = new Map();
+    let freshId = null, refreshVersion = 0, currentPeople = [], currentStatus = {};
+    const knownPeople = new Map();
     function el(tag, className, text) {
       const node = document.createElement(tag);
       if (className) node.className = className;
       if (text != null) node.textContent = text;
       return node;
     }
-
-    function renderStatus(status) {
-      if (!status) return;
-      const phase = status.phase === "talking" ? "In a conversation" : "Between people";
-      statusEl.textContent = status.band + " · " + phase;
-      noteEl.textContent = status.note || "";
-      phaseEl.textContent = phase;
-      transcriptEl.textContent = status.transcript || "Nothing yet. Double-tap when you meet someone, or type a line.";
-      momentsEl.replaceChildren();
-      (status.moments || []).forEach(function (moment) {
-        if (!moment) return;
-        momentsEl.appendChild(el("li", "", moment));
-      });
+    function showError(error) {
+      $("error").textContent = error.message || String(error);
+      $("error").hidden = false;
     }
-
-    function renderCards(people) {
-      cardsEl.replaceChildren();
-      if (!people.length) {
-        const empty = el("p", "empty", queryEl.value
-          ? "No one matches that."
-          : "No cards yet. Play the demo, or end a conversation to save one.");
-        cardsEl.appendChild(empty);
-        return;
-      }
-      people.forEach(function (person) {
-        const card = el("article", "card" + (person.id === freshId ? " is-new" : ""));
-        card.appendChild(el("h3", "", person.name));
-        const meetings = person.conversation_count === 1 ? "1 conversation" : person.conversation_count + " conversations";
-        card.appendChild(el("p", "meta", meetings));
-        if (person.summary) card.appendChild(el("p", "summary", person.summary));
-        if (person.working_on) card.appendChild(el("p", "working", "Working on " + person.working_on));
-        if (person.cares_about && person.cares_about.length) {
-          const chips = el("div", "chips");
-          person.cares_about.forEach(function (topic) { chips.appendChild(el("span", "chip", topic)); });
-          card.appendChild(chips);
-        }
-        if (person.promises && person.promises.length) {
-          const list = el("ul", "promises");
-          person.promises.forEach(function (promise) {
-            const when = promise.by_when ? " · " + promise.by_when : "";
-            list.appendChild(el("li", "", promise.what + when));
-          });
-          card.appendChild(list);
-        }
-        if (person.key_moments && person.key_moments.length) {
-          card.appendChild(el("p", "moments", person.key_moments[0]));
-        }
-        cardsEl.appendChild(card);
-      });
-    }
-
-    async function refresh() {
-      const response = await fetch("/api/state?q=" + encodeURIComponent(queryEl.value || ""));
-      const data = await response.json();
-      renderStatus(data.status);
-      renderCards(data.people || []);
-    }
-
-    async function post(url, body) {
-      const options = { method: "POST", headers: { "Content-Type": "application/json" } };
-      if (body) options.body = JSON.stringify(body);
+    async function request(url, options = {}) {
+      options.headers = { ...(options.headers || {}), ...(token ? {Authorization: "Bearer " + token} : {}) };
       const response = await fetch(url, options);
       if (!response.ok) {
-        let detail = "That did not work.";
-        try { detail = (await response.json()).detail || detail; } catch (error) { /* keep detail */ }
-        noteEl.textContent = detail;
+        let message = response.status === 401 ? "Open the pairing link shown on your laptop to connect this phone." : "Could not complete that action.";
+        try { const data = await response.json(); if (typeof data.detail === "string") message = data.detail; } catch (_) {}
+        throw new Error(message);
       }
       return response;
     }
-
-    function connect() {
-      const source = new EventSource("/api/events");
-      source.onmessage = function (event) {
-        const message = JSON.parse(event.data);
-        if (message.type === "status") renderStatus(message.status);
-        if (message.type === "card") {
-          freshId = message.person && message.person.id;
-          renderStatus(message.status);
-          refresh();
-        }
-        if (message.type === "reset") {
-          freshId = null;
-          renderStatus(message.status);
-          refresh();
-        }
-      };
-      source.onerror = function () {
-        source.close();
-        setTimeout(connect, 1000);
-      };
+    async function action(url, body, method = "POST") {
+      $("error").hidden = true;
+      const response = await request(url, {method, headers: {"Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
+      await refresh();
+      return response;
     }
-
-    document.getElementById("search-form").addEventListener("submit", function (event) {
+    function renderStatus(status) {
+      if (!status) return;
+      currentStatus = status;
+      const phases = {idle: "Ready to meet someone", talking: "In a conversation", processing: "Preparing contact…", error: "Something needs attention"};
+      $("status").textContent = (status.band || "No band connected") + " · " + (phases[status.phase] || status.phase);
+      $("note").textContent = status.note || "Start or double-tap when you're ready. End to prepare a contact.";
+      $("phase").textContent = phases[status.phase] || status.phase;
+      $("mode").textContent = status.mic_on ? "Live microphone · listening" : (status.extractor === "built-in" || status.sim ? "Offline / simulated capture" : "Microphone off");
+      $("transcript").textContent = status.transcript || "Your conversation will appear here. Tell the other person before recording.";
+      $("moments").replaceChildren(...(status.moments || []).filter(Boolean).map(m => el("li", "", m)));
+      const selected = status.wearer_speaker == null ? "" : String(status.wearer_speaker);
+      const labels = (status.speakers || []).map(s => String(typeof s === "object" ? (s.label ?? s.id) : s));
+      if (selected && !labels.includes(selected)) labels.push(selected);
+      $("wearer").replaceChildren(new Option("Not identified", ""), ...labels.map(s => new Option("Speaker " + s, s)));
+      $("wearer").value = selected;
+      const busy = status.phase === "processing";
+      $("new").disabled = busy || status.phase === "talking";
+      $("handshake").disabled = busy || status.phase === "talking";
+      $("end").disabled = busy || status.phase !== "talking";
+      $("discard").disabled = busy || status.phase !== "talking";
+      $("mark").disabled = busy || status.phase !== "talking";
+      $("wearer").disabled = busy;
+      $("existing-contact").disabled = busy;
+    }
+    const fields = [["name", "Name"], ["company", "Company"], ["role", "Role"], ["email", "Email"], ["phone", "Phone"], ["social_url", "Social profile URL"], ["summary", "Conversation notes"]];
+    function renderCards(people) {
+      currentPeople = people;
+      people.forEach(person => knownPeople.set(person.id, person));
+      const selectedContact = $("existing-contact").value;
+      $("existing-contact").replaceChildren(new Option("New person", ""), ...Array.from(knownPeople.values()).map(person => new Option((person.name || "Someone you met") + " · #" + person.id, String(person.id))));
+      $("existing-contact").value = knownPeople.has(Number(selectedContact)) ? selectedContact : "";
+      $("cards").replaceChildren();
+      if (!people.length) {
+        $("cards").append(el("p", "empty", $("q").value ? "No matching contacts." : "Start a conversation or play the offline demo. Your contacts will appear here."));
+        return;
+      }
+      people.forEach(person => {
+        const card = el("article", "card" + (person.id === freshId ? " is-new" : ""));
+        card.append(el("h3", "", person.name || "Someone you met"));
+        card.append(el("p", "meta", [person.role, person.company].filter(Boolean).join(" · ") || "Contact details need review"));
+        card.append(el("span", "badge", person.reviewed ? "Reviewed" : "Captured · editable"));
+        const delivery = person.delivery || {};
+        const deliveryPanel = el("div", "delivery");
+        deliveryPanel.setAttribute("aria-live", "polite");
+        for (const [channel, title] of [["icloud", "iCloud contact"], ["ntfy", "Phone notification"]]) {
+          const result = delivery[channel] || {};
+          const labels = {pending: "Sending…", saved: "Saved to iCloud", error: "Delivery failed", not_configured: "Not configured", sent: channel === "icloud" ? "Sent to iCloud" : "Notification sent", disabled: "Not configured / disabled", failed: "Delivery failed", skipped: "Not sent"};
+          const label = labels[result.status] || "Not sent";
+          deliveryPanel.append(el("p", "meta", title + ": " + label));
+          if (result.error) deliveryPanel.append(el("p", "delivery-error", String(result.error)));
+        }
+        if (Number.isFinite(delivery.elapsed_seconds)) deliveryPanel.append(el("p", "meta", "Delivery processing: " + delivery.elapsed_seconds.toFixed(1) + " seconds"));
+        deliveryPanel.append(el("p", "meta", "Phone sync depends on iCloud and your notification setup. Offline demos do not sync contacts."));
+        card.append(deliveryPanel);
+        if (person.social_url) {
+          try {
+            const url = new URL(person.social_url);
+            if (["https:", "http:"].includes(url.protocol)) {
+              const social = el("a", "social", "View social profile");
+              social.href = url.href; social.target = "_blank"; social.rel = "noopener noreferrer"; card.append(social);
+            }
+          } catch (_) {}
+        }
+        if (person.summary) card.append(el("p", "summary", person.summary));
+        if (person.email || person.phone) card.append(el("p", "meta", [person.email, person.phone].filter(Boolean).join(" · ")));
+        if (person.working_on) card.append(el("p", "working", "Working on " + person.working_on));
+        if ((person.promises || []).length) {
+          card.append(el("p", "meta", "Your captured promises — check these before importing"));
+          const list = el("ul", "promises");
+          person.promises.forEach(p => list.append(el("li", "", p.what + (p.by_when ? " · " + p.by_when : ""))));
+          card.append(list);
+        }
+        if ((person.key_moments || []).length) card.append(el("p", "moments", person.key_moments.join(" · ")));
+        const details = el("details", "");
+        details.open = drafts.has(person.id);
+        details.append(el("summary", "", "Edit / review contact"));
+        const form = el("form", "editor");
+        const draft = drafts.get(person.id) || {};
+        const inputs = {};
+        fields.forEach(([key, label]) => {
+          const id = "person-" + person.id + "-" + key;
+          const lab = el("label", "", label); lab.htmlFor = id;
+          const input = el(key === "summary" ? "textarea" : "input", "");
+          input.id = id; input.name = key;
+          if (key !== "summary") input.type = key === "email" ? "email" : key === "phone" ? "tel" : key === "social_url" ? "url" : "text";
+          input.value = draft[key] ?? person[key] ?? "";
+          input.addEventListener("input", () => {
+            drafts.set(person.id, {...(drafts.get(person.id) || {}), [key]: input.value});
+          });
+          inputs[key] = input; form.append(lab, input);
+        });
+        const promisesLabel = el("label", "", "Promises (one per line; remove any that are not yours)");
+        const promiseInput = el("textarea", "");
+        promiseInput.id = "person-" + person.id + "-promises"; promisesLabel.htmlFor = promiseInput.id;
+        promiseInput.value = draft.promiseText ?? (person.promises || []).map(p => p.what + (p.by_when ? " — " + p.by_when : "")).join("\n");
+        promiseInput.addEventListener("input", () => drafts.set(person.id, {...(drafts.get(person.id) || {}), promiseText: promiseInput.value}));
+        form.append(promisesLabel, promiseInput);
+        const buttons = el("div", "actions");
+        const save = el("button", "primary", "Save changes & mark reviewed"); save.type = "submit";
+        buttons.append(save); form.append(buttons);
+        form.addEventListener("submit", async event => {
+          event.preventDefault(); save.disabled = true;
+          try {
+            const body = Object.fromEntries(fields.map(([key]) => [key, inputs[key].value.trim()]));
+            body.promises = promiseInput.value.split("\n").filter(x => x.trim()).map(x => {
+              const existing = (person.promises || []).find(p => p.what + (p.by_when ? " — " + p.by_when : "") === x.trim());
+              return existing ? {what: existing.what, by_when: existing.by_when || ""} : {what: x.trim(), by_when: ""};
+            });
+            body.reviewed = true;
+            await request("/api/people/" + person.id, {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+            drafts.delete(person.id); $("error").hidden = true; await refresh();
+          } catch (error) { showError(error); save.disabled = false; }
+        });
+        details.append(form); card.append(details);
+        const download = el("button", "primary", "Download contact (.vcf)");
+        download.type = "button";
+        download.style.marginTop = "14px";
+        download.addEventListener("click", async () => {
+          download.disabled = true;
+          try {
+            const response = await request("/api/people/" + person.id + "/contact.vcf");
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = el("a", ""); link.href = url; link.download = (person.name || "contact").replace(/[^a-zA-Z0-9 _-]/g, "") + ".vcf";
+            document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+          } catch (error) { showError(error); }
+          finally { download.disabled = false; }
+        });
+        card.append(download, el("p", "meta", "Manual fallback: open the file and choose Add to Contacts. Review details whenever you need to."));
+        $("cards").append(card);
+      });
+    }
+    async function refresh() {
+      const version = ++refreshVersion;
+      try {
+        const data = await (await request("/api/state?q=" + encodeURIComponent($("q").value))).json();
+        if (version !== refreshVersion) return;
+        renderStatus(data.status); renderCards(data.people || []);
+      } catch (error) { showError(error); }
+    }
+    function connect() {
+      const source = new EventSource("/api/events" + (token ? "?token=" + encodeURIComponent(token) : ""));
+      source.onopen = () => refresh();
+      source.onmessage = event => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.status) renderStatus(message.status);
+          if (message.type === "card" || message.type === "delivery") { freshId = message.person && message.person.id; refresh(); }
+          if (message.type === "reset") { freshId = null; drafts.clear(); knownPeople.clear(); refresh(); }
+        } catch (error) { showError(error); }
+      };
+      source.onerror = () => { $("note").textContent = "Connection interrupted. Reconnecting…"; };
+    }
+    for (const [id, url] of [["new", "/api/start"], ["mark", "/api/mark"], ["handshake", "/api/handshake"], ["demo", "/api/demo"]]) {
+      $(id).addEventListener("click", () => action(url).catch(showError));
+    }
+    $("end").addEventListener("click", async () => {
+      const personId = $("existing-contact").value;
+      try {
+        await action("/api/end", {person_id: personId ? Number(personId) : null});
+        $("existing-contact").value = "";
+      } catch (error) { showError(error); }
+    });
+    $("discard").addEventListener("click", () => action("/api/discard").catch(showError));
+    $("reset").addEventListener("click", () => {
+      if (confirm("Delete all saved contacts and conversations?")) action("/api/reset").catch(showError);
+    });
+    $("wearer").addEventListener("change", () => action("/api/wearer", {speaker: $("wearer").value}).catch(showError));
+    $("search-form").addEventListener("submit", event => { event.preventDefault(); refresh(); });
+    $("q").addEventListener("input", refresh);
+    $("say-form").addEventListener("submit", async event => {
       event.preventDefault();
-      refresh();
+      try {
+        await action("/api/say", {text: $("line").value, speaker: $("line-speaker").value || null});
+        $("line").value = "";
+      } catch (error) { showError(error); }
     });
-    queryEl.addEventListener("input", function () { refresh(); });
-    document.getElementById("new").addEventListener("click", function () { post("/api/new"); });
-    document.getElementById("mark").addEventListener("click", function () { post("/api/mark"); });
-    document.getElementById("end").addEventListener("click", function () { post("/api/end"); });
-    document.getElementById("demo").addEventListener("click", function () { post("/api/demo"); });
-    document.getElementById("reset").addEventListener("click", function () {
-      if (window.confirm("Clear every card from this demo?")) post("/api/reset");
-    });
-    document.getElementById("say-form").addEventListener("submit", function (event) {
-      event.preventDefault();
-      const text = document.getElementById("line").value;
-      document.getElementById("line").value = "";
-      post("/api/say", { text: text });
-    });
-
-    connect();
-    refresh();
+    connect(); refresh();
   </script>
 </body>
 </html>

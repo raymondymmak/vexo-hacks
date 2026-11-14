@@ -1,8 +1,6 @@
 """SQLite store for people, the conversations you had with them, and promises.
 
-The same name (ignoring case and extra spaces) is the same person. A later
-conversation updates what they are working on and adds promises, it does not
-create a second card.
+Encounters stay distinct unless the wearer explicitly selects an existing person.
 """
 
 import json
@@ -71,6 +69,14 @@ class Store:
             );
             """
         )
+        columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(people)")}
+        for field in ("company", "role", "email", "phone", "contact_uid", "social_url", "delivery"):
+            if field not in columns:
+                self._conn.execute(f"ALTER TABLE people ADD COLUMN {field} TEXT NOT NULL DEFAULT ''")
+        if "reviewed" not in columns:
+            self._conn.execute("ALTER TABLE people ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0")
+        for row in self._conn.execute("SELECT id FROM people WHERE contact_uid = ''").fetchall():
+            self._conn.execute("UPDATE people SET contact_uid = ? WHERE id = ?", (str(uuid.uuid4()), row["id"]))
         self._conn.commit()
 
     def close(self) -> None:
@@ -84,11 +90,11 @@ class Store:
             self._conn.execute("DELETE FROM people")
             self._conn.commit()
 
-    def merge(self, card: dict, transcript: str, moments: list, started_at: str, ended_at: str) -> dict:
-        """Insert a person or fold this conversation into the person with the same name."""
+    def merge(self, card: dict, transcript: str, moments: list, started_at: str, ended_at: str, person_id=None) -> dict:
+        """Save a distinct encounter, or append to an explicitly confirmed person ID."""
         name = " ".join(str(card.get("name") or "").split())
         named = bool(name)
-        key = _name_key(name) if named else "unknown-" + uuid.uuid4().hex
+        key = "encounter-" + uuid.uuid4().hex
         display = name if named else "Someone you met"
         working_on = str(card.get("working_on") or "")
         summary = str(card.get("summary") or "")
@@ -102,8 +108,10 @@ class Store:
         now = _now()
         with self._lock:
             row = None
-            if named:
-                row = self._conn.execute("SELECT * FROM people WHERE name_key = ?", (key,)).fetchone()
+            if person_id is not None:
+                row = self._conn.execute("SELECT * FROM people WHERE id = ?", (person_id,)).fetchone()
+                if row is None:
+                    raise ValueError("The selected contact does not exist.")
             if row is None:
                 cur = self._conn.execute(
                     """INSERT INTO people
@@ -129,6 +137,11 @@ class Store:
                         person_id,
                     ),
                 )
+            for field in ("company", "role", "email", "phone"):
+                value = " ".join(str(card.get(field) or "").split())[:240]
+                if value:
+                    self._conn.execute(f"UPDATE people SET {field} = ? WHERE id = ?", (value, person_id))
+            self._conn.execute("UPDATE people SET reviewed = 0, contact_uid = CASE WHEN contact_uid = '' THEN ? ELSE contact_uid END WHERE id = ?", (str(uuid.uuid4()), person_id))
             cur = self._conn.execute(
                 """INSERT INTO conversations
                    (person_id, transcript, summary, key_moments, started_at, ended_at)
@@ -152,6 +165,53 @@ class Store:
                        VALUES (?, ?, ?, ?, ?)""",
                     (person_id, conversation_id, what, str(promise.get("by_when") or ""), now),
                 )
+            self._conn.commit()
+            return self._person(person_id)
+
+    def update_person(self, person_id: int, updates: dict):
+        from .extract import normalize_card
+        allowed = {"name", "company", "role", "email", "phone", "summary", "working_on", "promises", "reviewed", "social_url"}
+        if set(updates) - allowed:
+            raise ValueError("Unsupported contact field.")
+        if "reviewed" in updates and not isinstance(updates["reviewed"], bool):
+            raise ValueError("reviewed must be true or false.")
+        cleaned = normalize_card(updates)
+        social_url = str(updates.get("social_url") or "").strip()
+        if social_url:
+            from .socials import _valid_profile
+            if not _valid_profile(social_url):
+                raise ValueError("Use a LinkedIn or X profile URL.")
+        with self._lock:
+            if self._person(person_id) is None:
+                return None
+            for field in allowed - {"promises", "reviewed"}:
+                if field in updates:
+                    value = cleaned[field] if field != "social_url" else social_url
+                    if field == "name":
+                        value = value or "Someone you met"
+                    self._conn.execute(f"UPDATE people SET {field} = ? WHERE id = ?", (value, person_id))
+            if "promises" in updates:
+                self._conn.execute("DELETE FROM promises WHERE person_id = ?", (person_id,))
+                for promise in cleaned["promises"]:
+                    self._conn.execute("INSERT INTO promises (person_id, what, by_when, created_at) VALUES (?, ?, ?, ?)", (person_id, promise["what"], promise["by_when"], _now()))
+            self._conn.execute("UPDATE people SET reviewed = ?, updated_at = ? WHERE id = ?", (bool(updates.get("reviewed", False)), _now(), person_id))
+            self._conn.commit()
+            return self._person(person_id)
+
+    def set_delivery(self, person_id, delivery, social_url=None, *, contact_uid,
+                     original_social_url=None):
+        """Write background results only to the same contact, preserving user edits."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT contact_uid, social_url FROM people WHERE id = ?", (person_id,)
+            ).fetchone()
+            if row is None or row["contact_uid"] != contact_uid:
+                return None
+            self._conn.execute("UPDATE people SET delivery = ? WHERE id = ? AND contact_uid = ?",
+                               (json.dumps(delivery), person_id, contact_uid))
+            if social_url and original_social_url is not None and row["social_url"] == original_social_url:
+                self._conn.execute("UPDATE people SET social_url = ? WHERE id = ? AND contact_uid = ?",
+                                   (social_url, person_id, contact_uid))
             self._conn.commit()
             return self._person(person_id)
 
@@ -207,6 +267,10 @@ class Store:
         return {
             "id": row["id"],
             "name": row["name"],
+            **{field: row[field] for field in ("company", "role", "email", "phone", "contact_uid")},
+            "reviewed": bool(row["reviewed"]),
+            "social_url": row["social_url"],
+            "delivery": _loads(row["delivery"], {}),
             "working_on": row["working_on"],
             "cares_about": _loads(row["cares_about"], []),
             "deadlines": _loads(row["deadlines"], []),
@@ -247,6 +311,7 @@ def _union(old: list, new: list) -> list:
 def _haystack(person: dict) -> str:
     parts = [
         person.get("name") or "",
+        " ".join(person.get(field) or "" for field in ("company", "role", "email", "phone")),
         person.get("working_on") or "",
         person.get("summary") or "",
         " ".join(person.get("cares_about") or []),

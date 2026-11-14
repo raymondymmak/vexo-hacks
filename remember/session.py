@@ -2,10 +2,11 @@
 
 import queue
 import threading
+import time
 
 from .extract import attach_moments, make_extractor
 from .kitpath import plain
-from .splitter import Splitter
+from .splitter import Splitter, OpenConversation
 from .store import Store
 
 
@@ -17,6 +18,16 @@ class Session:
         self.lock = threading.Lock()
         self.subs = []
         self.on_saved = None
+        self.on_contact_ready = None
+        self.on_reset = None
+        self.on_capture = None
+        self.processing = False
+        self.last_audio = 0
+        self.partial_speaker = None
+        self.error = None
+        self.wearer_speaker = None
+        self.speaker_lines = []
+        self.operation_lock = threading.RLock()
         self.band_label = "Not connected"
         self.sim = False
         self.mic_on = False
@@ -35,7 +46,7 @@ class Session:
         self._publish({"type": "status", "status": status})
 
     def subscribe(self) -> queue.Queue:
-        inbox = queue.Queue()
+        inbox = queue.Queue(maxsize=32)
         with self.lock:
             self.subs.append(inbox)
         return inbox
@@ -45,9 +56,16 @@ class Session:
             if inbox in self.subs:
                 self.subs.remove(inbox)
 
-    def hear(self, text: str, final: bool = True) -> dict:
+    def hear(self, text: str, final: bool = True, speaker=None, audio=False) -> dict:
         with self.lock:
+            if self.processing or (audio and self.splitter.open is None):
+                return self._status()
+            if audio:
+                self.last_audio = time.monotonic()
             self.splitter.hear(text, final)
+            self.partial_speaker = None if final else (str(speaker) if speaker is not None else None)
+            if final and text.strip():
+                self.speaker_lines.append((str(speaker) if speaker is not None else None, text.strip()))
             status = self._status()
         self._publish({"type": "status", "status": status})
         return status
@@ -59,33 +77,167 @@ class Session:
         self._publish({"type": "status", "status": status})
         return status
 
-    def new_person(self):
-        """Double-tap: save the current person if there is one, then start the next."""
+    def start(self):
+        # Motion callbacks must not wait for a model call to finish and then
+        # accidentally start the next conversation from an old handshake.
         with self.lock:
-            closed = self.splitter.double_tap()
-            status = self._status()
-        self._publish({"type": "status", "status": status})
-        if closed is None:
-            return None
-        return self._finish(closed)
+            if self.processing:
+                return self._status()
+        with self.operation_lock:
+            with self.lock:
+                if self.processing or self.splitter.open is not None:
+                    return self._status()
+                self.splitter.open = OpenConversation()
+                self.speaker_lines = []
+                self.wearer_speaker = None
+                self.partial_speaker = None
+                self.error = None
+            try:
+                if self.on_capture:
+                    self.on_capture(True)
+            except Exception:
+                with self.lock:
+                    self.splitter.open = None
+                    self.note = "Could not start microphone. Reconnect and try again."
+                    self.error = self.note
+                    status = self._status()
+                self._publish({"type": "status", "status": status})
+                raise
+            status = self.state()["status"]
+            self._publish({"type": "status", "status": status})
+            return status
 
-    def end(self):
-        """Close the current person and go idle."""
+    def set_wearer(self, speaker):
         with self.lock:
-            closed = self.splitter.end()
+            self.wearer_speaker = speaker or None
             status = self._status()
         self._publish({"type": "status", "status": status})
-        if closed is None:
-            return None
-        return self._finish(closed)
+        return status
+
+    def toggle(self):
+        with self.lock:
+            if self.processing:
+                return self._status()
+        with self.operation_lock:
+            if self.splitter.open is None:
+                return self.start()
+            return self.end()
+
+    def new_person(self):
+        return self.toggle()
+
+    def end(self, person_id=None):
+        with self.operation_lock:
+            finished_at = time.monotonic()
+            was_listening = self.mic_on
+            try:
+                if self.on_capture:
+                    self.on_capture(False)
+            except Exception:
+                with self.lock:
+                    self.error = "Could not stop microphone. Reconnect the band and try again."
+                    status = self._status()
+                self._publish({"type": "status", "status": status})
+                raise
+            if was_listening:
+                # Let queued audio/STT finals arrive after the physical microphone stops.
+                # This bounded grace period also preserves the last interim if the
+                # service never emits a final. It is not a network flush guarantee.
+                start = time.monotonic()
+                deadline = start + 2.5
+                while time.monotonic() < deadline:
+                    now = time.monotonic()
+                    if now - start >= 1.0 and now - self.last_audio >= 0.5:
+                        break
+                    time.sleep(0.05)
+            with self.lock:
+                current = self.splitter.open
+                lines = list(self.speaker_lines)
+                if current is not None and current.partial.strip():
+                    lines.append((self.partial_speaker, current.partial.strip()))
+                closed = self.splitter.end()
+                wearer = self.wearer_speaker
+                self.speaker_lines = []
+                self.processing = closed is not None
+                self.error = None
+                status = self._status()
+            self._publish({"type": "status", "status": status})
+            if closed is None:
+                return None
+            if lines:
+                closed.transcript = "\n".join(
+                    "[%s] %s" % ("wearer" if wearer is not None and who == wearer
+                                  else "speaker " + who if who is not None else "unknown", text)
+                    for who, text in lines)
+            try:
+                closed.finished_at = finished_at
+                person = self._finish(closed, person_id=person_id)
+                with self.lock:
+                    self.speaker_lines = []
+                    self.partial_speaker = None
+                    self.wearer_speaker = None
+                # Drop transient raw capture after successful persistence.
+                if current is not None:
+                    current.lines.clear()
+                    current.partial = ""
+                    current.moments.clear()
+                lines.clear()
+                closed.transcript = ""
+                closed.moments.clear()
+                return person
+            except Exception:
+                # Keep the original capture available for review or an explicit retry.
+                with self.lock:
+                    self.splitter.open = current
+                    self.speaker_lines = list(lines[:-1] if current and current.partial.strip() else lines)
+                    self.error = "Could not save this conversation. Your transcript is retained; try End again."
+                raise
+            finally:
+                with self.lock:
+                    self.processing = False
+                    status = self._status()
+                self._publish({"type": "status", "status": status})
+
+    def discard(self) -> dict:
+        """Stop capture and forget its transient words without deleting contacts."""
+        with self.operation_lock:
+            if self.on_capture:
+                self.on_capture(False)
+            with self.lock:
+                current = self.splitter.open
+                if current is not None:
+                    current.lines.clear()
+                    current.partial = ""
+                    current.moments.clear()
+                self.splitter = Splitter()
+                self.speaker_lines = []
+                self.wearer_speaker = None
+                self.partial_speaker = None
+                self.error = None
+                self.mic_on = False
+                status = self._status()
+            self._clear_transient_events()
+            self._publish({"type": "status", "status": status})
+            return status
 
     def reset(self) -> dict:
-        with self.lock:
-            self.store.reset()
-            self.splitter = Splitter()
-            status = self._status()
-        self._publish({"type": "reset", "status": status})
-        return status
+        # Wait for any in-flight extraction so it cannot recreate a card after reset.
+        with self.operation_lock:
+            if self.on_capture:
+                self.on_capture(False)
+            if self.on_reset:
+                self.on_reset()
+            with self.lock:
+                self.speaker_lines = []
+                self.wearer_speaker = None
+                self.partial_speaker = None
+                self.error = None
+                self.store.reset()
+                self.splitter = Splitter()
+                status = self._status()
+            self._clear_transient_events()
+            self._publish({"type": "reset", "status": status})
+            return status
 
     def state(self, query: str = "") -> dict:
         with self.lock:
@@ -93,23 +245,38 @@ class Session:
             status = self._status()
         return {"people": people, "status": status}
 
-    def _finish(self, closed):
+    def _finish(self, closed, person_id=None):
         card = self.extractor.extract(closed.transcript, closed.moments)
         card = attach_moments(card, closed.moments)
+        # Taps guide extraction, but raw quotes and transcripts are transient.
+        card["key_moments"] = []
         person = self.store.merge(
             card,
-            transcript=closed.transcript,
-            moments=card.get("key_moments") or closed.moments,
+            transcript="",
+            moments=[],
             started_at=closed.started_at,
             ended_at=closed.ended_at,
+            person_id=person_id,
         )
         with self.lock:
             status = self._status()
+        self._clear_transient_events()
         self._publish({"type": "card", "person": person, "status": status})
         verb = "Updated" if person["conversation_count"] > 1 else "Saved"
         print("%s %s." % (verb, plain(person["name"])))
         if self.on_saved is not None:
-            self.on_saved(person)
+            try:
+                self.on_saved(person)
+            except Exception:
+                # Peripheral feedback must not turn a committed card into a failed save.
+                with self.lock:
+                    self.note = "Contact saved; band feedback was unavailable."
+        if self.on_contact_ready is not None:
+            try:
+                self.on_contact_ready(dict(person, _finished_at=getattr(closed, "finished_at", time.monotonic())))
+            except Exception:
+                with self.lock:
+                    self.note = "Contact saved; delivery could not be queued."
         return person
 
     def _status(self) -> dict:
@@ -119,15 +286,44 @@ class Session:
             "sim": self.sim,
             "mic_on": self.mic_on,
             "extractor": getattr(self.extractor, "label", ""),
-            "note": self.note,
-            "phase": "talking" if current is not None else "idle",
+            "note": self.error or self.note,
+            "error": self.error,
+            "phase": "processing" if self.processing else "talking" if current is not None else "idle",
+            "speakers": sorted({who for who, _ in self.speaker_lines if who is not None}),
+            "wearer_speaker": self.wearer_speaker,
             "transcript": current.transcript() if current is not None else "",
             "moments": [moment.text for moment in current.moments] if current is not None else [],
             "people": self.store.count(),
         }
 
+    def _clear_transient_events(self):
+        """Discard queued live-transcript status snapshots after save/discard/reset."""
+        with self.lock:
+            listeners = list(self.subs)
+        for inbox in listeners:
+            with inbox.mutex:
+                retained = [event for event in inbox.queue
+                            if not isinstance(event, dict) or event.get("type") != "status"]
+                removed = len(inbox.queue) - len(retained)
+                inbox.queue.clear()
+                inbox.queue.extend(retained)
+                inbox.unfinished_tasks = max(0, inbox.unfinished_tasks - removed)
+                inbox.not_full.notify_all()
+
     def _publish(self, payload: dict) -> None:
         with self.lock:
             listeners = list(self.subs)
         for inbox in listeners:
-            inbox.put(payload)
+            try:
+                inbox.put_nowait(payload)
+            except queue.Full:
+                try:
+                    inbox.get_nowait()
+                    inbox.task_done()
+                except queue.Empty:
+                    pass
+                try:
+                    inbox.put_nowait(payload)
+                except queue.Full:
+                    # Another producer won the race. The client can refresh state.
+                    pass

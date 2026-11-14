@@ -4,6 +4,7 @@ import os
 import tempfile
 import time
 import unittest
+from unittest.mock import MagicMock, patch
 
 os.environ["REMEMBER_STT"] = "mock"
 os.environ["REMEMBER_EXTRACTOR"] = "builtin"
@@ -29,6 +30,38 @@ def wait_until(predicate, timeout=4):
 
 
 class BandTests(unittest.TestCase):
+    def test_capture_is_off_until_start_and_stops_at_end(self):
+        session = Session(":memory:", extractor=HeuristicExtractor())
+        fake = MagicMock()
+        fake.name = "Test band"
+        fake.connected = True
+        with patch("remember.band.connect_band", return_value=fake):
+            bridge = BandSession(session, number=None, sim=True, listen=True)
+            with patch.object(bridge, "_start_mic", return_value=True) as start_mic:
+                bridge.start()
+                start_mic.assert_not_called()
+                self.assertFalse(session.state()["status"]["mic_on"])
+                session.start()
+                start_mic.assert_called_once()
+                self.assertTrue(session.state()["status"]["mic_on"])
+                session.end()
+                fake.configure.assert_called_with(audio=False, mic_level=False)
+                self.assertFalse(session.state()["status"]["mic_on"])
+        session.close()
+
+    def test_handshake_cannot_split_an_active_conversation(self):
+        session = Session(":memory:", extractor=HeuristicExtractor())
+        bridge = BandSession(session, number=None, sim=True, handshake=True)
+        bridge.detector = MagicMock()
+        bridge.detector.feed.return_value = True
+        bridge._motion({})
+        session.hear("A conversation", True)
+        current = session.splitter.open
+        bridge._motion({})
+        self.assertIs(current, session.splitter.open)
+        self.assertEqual(session.store.count(), 0)
+        session.close()
+
     def test_green_waits_until_the_microphone_is_off(self):
         seen = []
         sim = SimTransport(auto_tap=False, on_led=lambda light: seen.append(dict(light)))

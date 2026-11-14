@@ -211,6 +211,13 @@ class RememberProcessor(FrameProcessor):
         super().__init__()
         self.session = session
         self.speakers = []
+        self.control_future = None
+
+    def _control_done(self, future):
+        try:
+            future.result()
+        except Exception:
+            print("Problem: capture could not finish; check the status on the page.")
 
     async def process_frame(self, frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -218,18 +225,26 @@ class RememberProcessor(FrameProcessor):
             if isinstance(frame, InterimTranscriptionFrame):
                 text = (frame.text or "").strip()
                 if text:
-                    await asyncio.get_running_loop().run_in_executor(None, self.session.hear, text, False)
+                    await asyncio.get_running_loop().run_in_executor(None, lambda: self.session.hear(text, False, speaker=getattr(getattr(frame, "speaker", None), "label", None), audio=True))
             elif isinstance(frame, TranscriptionFrame):
                 text = (frame.text or "").strip()
                 speaker = getattr(frame, "speaker", None)
                 if speaker is not None:
                     self.speakers.append(speaker.label)
                 if text:
-                    await asyncio.get_running_loop().run_in_executor(None, self.session.hear, text, True)
+                    await asyncio.get_running_loop().run_in_executor(None, lambda: self.session.hear(text, True, speaker=speaker.label if speaker is not None else None, audio=True))
             elif isinstance(frame, TapFrame):
                 loop = asyncio.get_running_loop()
                 if frame.kind == "double-tap":
-                    await loop.run_in_executor(None, self.session.new_person)
+                    if self.control_future is not None and not self.control_future.done():
+                        # Ignore extra stop gestures while final speech is draining.
+                        # Waiting here would block the very final frames end() needs.
+                        pass
+                    elif self.session.mic_on:
+                        self.control_future = loop.run_in_executor(None, self.session.toggle)
+                        self.control_future.add_done_callback(self._control_done)
+                    else:
+                        await loop.run_in_executor(None, self.session.toggle)
                 else:
                     await loop.run_in_executor(None, self.session.mark)
         except Exception as error:

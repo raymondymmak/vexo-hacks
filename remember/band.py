@@ -12,6 +12,7 @@ turns the microphone back on.
 import threading
 
 from .kitpath import ensure_kit
+from .motion import HandshakeDetector
 
 _LED_LOCK = threading.Lock()
 
@@ -112,7 +113,7 @@ def _flash_saved(band, seconds: float) -> bool:
 class BandSession:
     """Own the band. Tap handlers only enqueue a frame; the pipeline does the work."""
 
-    def __init__(self, session, number, sim: bool, pipeline=None, replay: str = "", listen: bool = False) -> None:
+    def __init__(self, session, number, sim: bool, pipeline=None, replay: str = "", listen: bool = False, handshake: bool = False) -> None:
         self.session = session
         self.number = number
         self.sim = sim
@@ -121,15 +122,21 @@ class BandSession:
         self.listen = listen
         self.band = None
         self.decoder = None
+        self.handshake = handshake
+        self.detector = HandshakeDetector()
+        self._capture_lock = threading.RLock()
+        self._audio_registered = False
 
     def start(self):
         self.band = connect_band(self.number, self.sim, self.replay if self.listen else "")
         self.band.on("tap", lambda _event: self._gesture("tap"))
         self.band.on("double-tap", lambda _event: self._gesture("double-tap"))
         self.band.configure(events=True)
+        self.session.on_capture = self._capture
+        if self.handshake:
+            self.band.on("motion", self._motion)
+            self.band.configure(motion=50)
         mic_on = False
-        if self.listen:
-            mic_on = self._start_mic()
         if mic_on:
             note = "Listening through Pipecat and Deepgram. The blue light means the microphone is on."
         elif self.pipeline is not None and not self.listen:
@@ -147,12 +154,39 @@ class BandSession:
             self.pipeline.feed_tap(kind)
             return
         if kind == "double-tap":
-            self.session.new_person()
+            self.session.toggle()
         else:
             self.session.mark()
 
+    def _motion(self, event):
+        if self.detector.feed(event) and self.session.state()["status"]["phase"] == "idle":
+            self.session.start()
+
+    def _capture(self, active):
+        with self._capture_lock:
+            mic_on = False
+            if self.band is not None and self.listen:
+                if active:
+                    mic_on = self._start_mic()
+                    if not mic_on:
+                        raise RuntimeError("The microphone could not start; check the band connection.")
+                else:
+                    self.band.configure(audio=False, mic_level=False)
+            self.session.set_band(
+                ("Pretend band " if self.sim else "Band ") + self.band.name,
+                self.sim, mic_on,
+                "Listening through Pipecat and Deepgram." if mic_on else
+                "Ready. Double-tap to start or use Start on the page.",
+            )
+
     def _flash(self, _person) -> None:
-        threading.Thread(target=flash_saved, args=(self.band,), daemon=True).start()
+        def show():
+            with self._capture_lock:
+                # Do not interrupt a new conversation that began during extraction.
+                if self.session.state()["status"]["phase"] == "talking":
+                    return
+                flash_saved(self.band)
+        threading.Thread(target=show, daemon=True).start()
 
     def _start_mic(self) -> bool:
         """Decode the band's Opus packets to PCM and feed the Pipecat pipeline."""
@@ -161,7 +195,8 @@ class BandSession:
         from vexo_open.sync import VexoError
 
         print("Loading the sound decoder (a few seconds, the first time)...")
-        self.decoder = PcmDecoder()
+        if self.decoder is None:
+            self.decoder = PcmDecoder()
         print("Note: while this runs, everything the band's microphone hears is sent over "
               "the internet to Deepgram (deepgram.com) through Pipecat. Tell the people near the band.")
 
@@ -170,7 +205,9 @@ class BandSession:
             if pcm and self.pipeline is not None:
                 self.pipeline.feed_pcm(pcm)
 
-        self.band.on("audio", on_audio)
+        if not self._audio_registered:
+            self.band.on("audio", on_audio)
+            self._audio_registered = True
         try:
             self.band.configure(audio=True)
         except VexoError as error:

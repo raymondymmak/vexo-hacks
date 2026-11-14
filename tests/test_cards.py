@@ -34,8 +34,7 @@ class ExtractTests(unittest.TestCase):
         self.assertIn("soil sensor", card["working_on"])
         self.assertIn("field deployments", card["cares_about"])
         self.assertIn("battery life", card["cares_about"])
-        self.assertEqual(card["promises"][0]["by_when"], "Friday")
-        self.assertIn("firmware", card["promises"][0]["what"])
+        self.assertEqual(card["promises"], [])
         self.assertTrue(any("Friday" in moment for moment in card["key_moments"]))
 
     def test_openai_call_keeps_tapped_moments(self):
@@ -88,9 +87,9 @@ class StoreTests(unittest.TestCase):
             "summary": name + " is working on " + working + ".",
         }
 
-    def test_same_name_is_one_person(self):
+    def test_explicit_identity_merges_person(self):
         first = self.store.merge(self._card("Maya Chen", "a soil sensor", "send the notes"), "one", [], "s", "e")
-        second = self.store.merge(self._card("maya chen", "a soil sensor on a drone", "send the notes"), "two", [], "s", "e")
+        second = self.store.merge(self._card("maya chen", "a soil sensor on a drone", "send the notes"), "two", [], "s", "e", person_id=first["id"])
         self.assertEqual(first["id"], second["id"])
         self.assertEqual(second["conversation_count"], 2)
         self.assertEqual(len(second["promises"]), 1)
@@ -114,12 +113,11 @@ class SplitterTests(unittest.TestCase):
         closed = splitter.double_tap()
         self.assertIn("Maya Chen", closed.transcript)
         self.assertIn("Friday", closed.moments[0])
-        self.assertIsNotNone(splitter.open)
-        self.assertEqual(splitter.open.transcript(), "")
+        self.assertIsNone(splitter.open)
 
 
 class DemoTests(unittest.TestCase):
-    def test_scripted_fair_merges_the_second_meeting(self):
+    def test_scripted_fair_keeps_encounters_separate(self):
         file = tempfile.NamedTemporaryFile(suffix=".sqlite")
         session = Session(file.name, extractor=HeuristicExtractor())
         try:
@@ -127,9 +125,9 @@ class DemoTests(unittest.TestCase):
             names = [person["name"] for person in saved]
             self.assertEqual(names, ["Maya Chen", "Jordan Hale", "Maya Chen"])
             people = session.state()["people"]
-            self.assertEqual(len(people), 2)
+            self.assertEqual(len(people), 3)
             maya = next(person for person in people if person["name"] == "Maya Chen")
-            self.assertEqual(maya["conversation_count"], 2)
+            self.assertEqual(maya["conversation_count"], 1)
             self.assertTrue(session.state("robotics")["people"])
             self.assertIn("drone", maya["working_on"])
         finally:

@@ -1,97 +1,93 @@
 # Remember
 
-You remember people. They remember you.
+Meet someone. Remember them on your phone.
 
-Remember is a hands-free notebook for back-to-back conversations, such as a career fair. A Vexo Open wristband hears the room. Pipecat sends that audio to Deepgram. When the conversation ends, one card is saved: who they are, what they are working on, what they care about, what you promised, and the moments you tapped to keep. The next time you meet them, the page finds the card.
+One Vexo Open band captures a conversation through Pipecat and Deepgram. End the conversation to create a contact with their name, company, role, contact details, notes, and attributed promises. With automatic delivery configured, Remember saves the contact to iCloud through CardDAV and sends an ntfy notification. A downloadable vCard is always available as a fallback.
 
-The band has a microphone, a motion sensor, and one light. It has no screen and no vibration. Double-tap starts a new person. A single tap marks a moment. The page is the screen.
-
-Audio always goes through a Pipecat pipeline:
-
-`band or clip (PCM) → BandAudioTransport → DeepgramSTTService → RememberProcessor → cards`
-
-`DeepgramSTTService` is Pipecat's Deepgram speech-to-text service, model `nova-3-general`, with interim results, speaker diarization, punctuation, and `mip_opt_out` so Deepgram does not keep the audio for training. With no API key, `MockDeepgramSTTService` sits in that same slot and the tests never call the network.
+This version is one-to-one capture with one wearer. It does not exchange contacts between bands or match people across a room.
 
 ## Set up
 
-From this folder, on Python 3.11 or newer (3.12 is what this was run on). Pipecat 1.16 does not support Python 3.9 or 3.10.
+Use Python 3.11 or newer; development uses Python 3.12.
 
-    sh scripts/setup.sh
-    python3 -m venv .venv
-    source .venv/bin/activate
-    python3 -m pip install -r requirements.txt
+```sh
+sh scripts/setup.sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+```
 
-`scripts/setup.sh` clones the Vexo Open kit into `vexo-open-kit/` and leaves it unchanged. That folder is gitignored. On Windows, use `python` instead of `python3`.
+The setup script clones the Vexo Open kit into the ignored `vexo-open-kit/` directory. The application uses its band and audio libraries without modifying the kit.
 
-## (a) Pretend band, no API keys
+## Offline demo
 
-    python3 -m remember --sim --demo
+```sh
+.venv/bin/python -m remember --demo --port 8001
+```
 
-Open <http://127.0.0.1:8000>. The pretend band connects, the scripted career fair plays through the card builder, and the light flashes green as each card is saved. Nothing is sent to Deepgram or OpenAI. The page lets you type a line, mark a moment, end the conversation, search, play the demo again, or reset.
+Open the paired localhost link printed in the terminal (port 8001). The scripted conversations produce editable contacts. Try Start, typed lines, Mark, End, search, and Download contact. The demo uses the built-in extractor and never sends contacts, notifications, or social searches, even when delivery credentials are configured.
 
-The same pipeline will also take a recording, still with no key. The file is PCM into Pipecat. The offline reader then speaks the scripted fair (it does not transcribe the file):
+To print the demo cards and exit:
 
-    python3 -m remember --clip vexo-open-kit/dashboard/speech/sample-speech.opus --once
+```sh
+.venv/bin/python -m remember --demo --once
+```
 
-A 16 kHz mono 16-bit `.wav` works the same way. Add `--sim` if you also want the pretend band connected while a clip plays.
+The offline clip path exercises PCM through Pipecat, but its mock transcriber emits scripted text rather than transcribing the recording:
 
-To print the demo cards and exit, without the page:
+```sh
+.venv/bin/python -m remember --clip vexo-open-kit/dashboard/speech/sample-speech.opus --once
+```
 
-    python3 -m remember --demo --once
+## Your band and phone
 
-## (b) Your band, on a Mac, with keys
+Copy `env.example` to `.env` and fill in your team's `DEEPGRAM_API_KEY` and `OPENAI_API_KEY` locally. Keep keys and passwords out of Git and chat.
 
-Use the number written on your band's bag. This program never guesses it and never scans for another band. Close the kit dashboard first: the band takes one Bluetooth connection.
+```sh
+cp env.example .env
+.venv/bin/python -m pip install bleak
+.venv/bin/python -m remember NUMBER --lan --port 8001
+```
 
-Tell the people near you before the microphone goes on. The light turns solid blue, and everything it hears is sent to Deepgram through Pipecat.
+Replace `NUMBER` with the number on your band's bag. Close the kit dashboard first: the band accepts one Bluetooth connection. Double-tap the band to make it discoverable before starting the command. The program targets only your specified band.
 
-Create `.env` yourself from the example. Do not commit it, and do not paste the keys into a chat.
+`--lan` prints a paired phone link. Open that exact link on an iPhone on the same Wi-Fi; it contains the token needed to view your contacts and control the session. Without `--lan`, the page is available only on the laptop.
 
-    cp env.example .env
+Tell the other person before recording. Once connected, double-tap or press Start to begin capture, and double-tap or press End to finish. A single tap marks a moment. The microphone's blue light indicates listening; audio is sent to Deepgram. Choose which transcript speaker is you before ending if you want promises attributed to you. Uncertain details remain available for review rather than becoming confirmed wearer promises.
 
-Put your team's `DEEPGRAM_API_KEY` and `OPENAI_API_KEY` on those two lines. Then:
+Use the page's existing-contact selector and End button to explicitly associate a new conversation with a saved person. Band-ended conversations create separate encounters, even when names match.
 
-    python3 -m pip install bleak
-    python3 -m remember NUMBER
+`--handshake` enables experimental motion-based starts while idle. It is off by default and still requires real-band validation. Repeated movement during a conversation must not start another one; double-tap remains the fallback.
 
-Double-tap the band so it blinks blue, then start the command. Double-tap again when you meet someone. A single tap marks the line you want to keep. Double-tap for the next person, or press End conversation on the page. After a card is saved the light goes green for a moment. The microphone is paused for that, because the band refuses the light while the microphone is on.
+## Automatic contact delivery
 
-`--sim` with both keys set plays a clip through the real Deepgram service instead of the offline reader:
+Set `REMEMBER_AUTO_DELIVER=1` in `.env` to opt in. Delivery runs after the contact is saved locally, without waiting for a review click. Review and edit the resulting card whenever needed; edits queue a fresh delivery, and the UI reports each delivery channel separately. Reset cancels queued work; a provider request already sent cannot be recalled.
 
-    python3 -m remember --sim --clip vexo-open-kit/dashboard/speech/sample-speech.opus
+For iCloud:
 
-## Gestures
+1. Enable Contacts sync for your iCloud account on the iPhone.
+2. Generate an app-specific password in your Apple Account and enter it as `ICLOUD_APP_PASSWORD`; enter your account username as `ICLOUD_USERNAME`. Apple requires two-factor authentication for app-specific passwords: [Apple's setup instructions](https://support.apple.com/en-us/102654).
+3. Leave `ICLOUD_ADDRESSBOOK_URL` empty for discovery. If multiple address books require a selection, set it to the intended HTTPS iCloud address-book collection URL.
 
-| Gesture | What it does |
-|---|---|
-| Double-tap | Close the current person, if they said anything, and start the next one |
-| Single tap | Keep the words around that moment on the card |
-| End conversation | Save the current person and wait |
-| Type a line | Same pipeline as speech, without the microphone |
+For notifications, install/open ntfy on your phone and subscribe to your chosen topic yourself. Set `NTFY_URL` to its full HTTPS topic URL, and set `NTFY_TOKEN` when your server/topic requires authentication. Remember publishes to that topic; it does not subscribe the phone automatically.
 
-The first words also open a conversation if the double-tap comes a moment late.
+Optionally set `REMEMBER_PUBLIC_URL` to the base URL where your running Remember instance is reachable from the phone. Notifications can then include a contact-scoped vCard fallback link. This setting does not expose or host the server for you. Use your own reachable address; a laptop's `localhost` address will not work on a phone. Fallback links require HTTPS, expire after 15 minutes, and stop working after a server restart. They are attached only if the iCloud save fails.
 
-## Tests
+Social lookup is best-effort and runs only in automatic delivery mode. `REMEMBER_SOCIAL_LOOKUP=1` enables it (the default in that mode); `0` disables it. It uses name and company to seek a supported public profile with source evidence, and leaves the URL empty when uncertain or unavailable. `REMEMBER_SOCIAL_MODEL` defaults to `gpt-4.1-mini` and is configurable.
 
-    python3 -m unittest discover -s tests -v
+The demo target is fast contact-to-phone delivery, not a guaranteed ten-second result. Displayed elapsed time starts when capture is ended and includes extraction and background enrichment/delivery; it excludes later iPhone Contacts sync. A successful server write or notification publish is not proof the phone has displayed it. Failed delivery leaves the local card and manual vCard download available.
 
-The tests use the pretend band and `MockDeepgramSTTService`. They do not need API keys, Bluetooth, or a network call. `REMEMBER_STT=mock` and `REMEMBER_EXTRACTOR=builtin` force that even if a key is set in the environment.
+## Data and tests
 
-## What the code uses
+New captures keep raw transcript text in memory for the active conversation and extraction. New raw transcripts are not persisted; saved contacts, generated summaries, attributed promises, and delivery status remain in SQLite. Raw tapped quotes are discarded too. Existing databases are migrated additively; historical transcript rows are not erased. Use the app's reset only when you intend to delete all saved contacts and conversations.
 
-Pipecat 1.16.0 (`pipecat-ai[deepgram]==1.16.0`):
+Audio flow:
 
-- `Pipeline`, `PipelineWorker`, `PipelineParams`, `WorkerRunner`
-- `BaseTransport`, `BaseInputTransport`, `TransportParams`
-- `InputAudioRawFrame`, `TranscriptionFrame`, `InterimTranscriptionFrame`, `TranscriptionSpeaker`
-- `DeepgramSTTService` and `DeepgramSTTService.Settings`
-- `FrameProcessor` for `MockDeepgramSTTService` and `RememberProcessor`
+`band or clip PCM → Pipecat transport → Deepgram speech-to-text → session → contact extraction → local save → optional enrichment/delivery`
 
-The band library is the kit's `vexo_open.sync.Band`. Opus packets are decoded to 16 kHz PCM with `PcmDecoder` and pushed into the transport. Cards are one OpenAI structured-output call per conversation through the kit's `ai.extract` when `OPENAI_API_KEY` is set, and a built-in reader otherwise. People, conversations, and promises are in SQLite. The page is FastAPI with server-sent events.
+The UI is FastAPI plus server-sent events. Local saving and vCard export work when delivery is disabled or unavailable.
 
-## Layout
+```sh
+REMEMBER_STT=mock REMEMBER_EXTRACTOR=builtin .venv/bin/python -m unittest discover -s tests -v
+```
 
-    remember/          this program
-    vexo-open-kit/     the kit, cloned by scripts/setup.sh, not committed
-    .env               your keys, not committed
-    env.example        the empty form
+Tests use simulated input and mocked provider responses. Real-band audio, handshake detection, iCloud credentials, notification subscriptions, and final iPhone sync require separate hardware/account validation.
