@@ -1,6 +1,8 @@
 """FastAPI page: person cards, live updates, recall, and the demo controls."""
 
 import json
+import os
+import httpx
 import queue
 import secrets
 from urllib.parse import urlsplit
@@ -40,6 +42,24 @@ def create_app(session, play_demo=None, pairing_token=None, download_secret=None
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
         return response
+
+    @app.get("/api/room/map")
+    async def room_map():
+        url = os.environ.get('REMEMBER_ROOM_MAP_URL', '').rstrip('/')
+        token = os.environ.get('REMEMBER_ROOM_MAP_TOKEN', '')
+        if not url or not token:
+            return {'connected': False, 'detail': 'No shared room is connected yet.', 'participants': [], 'edges': []}
+        try:
+            async with httpx.AsyncClient(timeout=3, follow_redirects=False, trust_env=False) as client:
+                response = await client.get(url + '/api/state', headers={'Authorization': 'Bearer ' + token})
+                response.raise_for_status()
+                data = response.json()
+            # Only the projector's public fields cross into the dashboard.
+            return {'connected': True,
+                    'participants': [{k: p[k] for k in ('id', 'name', 'simulated') if k in p} for p in data['participants']],
+                    'edges': [{k: e[k] for k in ('id', 'source_id', 'target_id', 'kind', 'created_at') if k in e} for e in data['edges']]}
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            return JSONResponse({'detail': 'The shared room is unavailable. Reconnecting…'}, status_code=503)
 
     @app.post("/api/start")
     def start():

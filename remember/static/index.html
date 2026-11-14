@@ -109,6 +109,13 @@
       <p id="transcript-retention" class="meta" style="margin-top:14px">Full transcripts stay in this computer's local history. They are not included in iCloud contacts or notifications.</p>
     </section>
     <section id="panel-room" role="tabpanel" aria-labelledby="tab-room" hidden>
+      <div class="room-overview"><div><h2>People in the room</h2><p id="room-map-status" class="meta" role="status">Connecting to the shared room…</p></div><span id="room-map-counts" class="room-counter"></span></div>
+      <div class="room-workspace">
+        <section class="panel room-map-card" aria-label="Shared room map"><svg id="main-room-map" viewBox="0 0 800 460" role="img" aria-label="People and connections, also listed alongside the map"></svg><p class="meta room-map-caption">Connections, not physical locations. Conversation details stay private.</p></section>
+        <section class="panel room-activity"><h2>Connections</h2><div id="main-room-connections"><p class="meta">Connections will appear when people meet.</p></div></section>
+      </div>
+      <div id="main-room-people" class="room-people"></div>
+
       <div id="room-empty" class="empty"><h2>Your next conversation.</h2><p>Connect this band to a room to see your introductions and suggested connections here.</p><p class="meta">Details are private to the people involved. The shared projector shows only names and connections.</p></div>
       <section id="room-panel" class="panel" hidden aria-labelledby="room-title"><h2 id="room-title">Your room connections</h2><p id="room-status" class="meta" aria-live="polite"></p><div id="room-alerts"></div></section>
     </section>
@@ -303,6 +310,36 @@
       container.scrollTop=selected === "live" && (follow || changed) ? container.scrollHeight : changed ? 0 : oldScroll;
       renderHistoryList();
     }
+    let roomMapBusy = false;
+    function roomSvg(tag, attrs, text) {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [key,value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+      if (text != null) node.textContent = text;
+      return node;
+    }
+    async function refreshRoomMap() {
+      if (roomMapBusy || document.hidden) return;
+      roomMapBusy = true;
+      try {
+        const response = await request('/api/room/map', {signal: AbortSignal.timeout(5000)});
+        const data = await response.json(), people = data.participants || [], byId = new Map(people.map(p=>[p.id,p]));
+        const kinds = {meeting:'Met',intro:'Introduction',match:'Shared opportunity'}, colors = {meeting:'#a1a1a6',intro:'#007aff',match:'#176b61'};
+        const edges = (data.edges || []).filter(e=>byId.has(e.source_id)&&byId.has(e.target_id)&&kinds[e.kind]);
+        $('room-map-status').textContent = data.connected ? (people.length && people.every(p=>p.simulated) ? 'Live demo · Simulated participants' : 'Live room') : data.detail;
+        $('room-map-counts').textContent = people.length + ' people · ' + edges.length + ' connections';
+        const positions = new Map(people.map((p,i)=>{const a=-Math.PI/2+2*Math.PI*i/people.length;return [p.id,people.length===1?[400,210]:[400+Math.cos(a)*245,215+Math.sin(a)*135]];}));
+        const nodes=[];
+        edges.forEach((edge,i)=>{const a=positions.get(edge.source_id),b=positions.get(edge.target_id),bend=(i%3-1)*22;nodes.push(roomSvg('path',{d:`M ${a[0]} ${a[1]} Q ${(a[0]+b[0])/2+bend} ${(a[1]+b[1])/2+bend} ${b[0]} ${b[1]}`,fill:'none',stroke:colors[edge.kind],'stroke-width':2.5,'stroke-dasharray':edge.kind==='intro'?'6 5':'none'}));});
+        people.forEach(person=>{const [x,y]=positions.get(person.id);nodes.push(roomSvg('circle',{cx:x,cy:y,r:27,fill:'#f2f7ff',stroke:'#dbe9fc','stroke-width':2}),roomSvg('text',{x,y:y+6,'text-anchor':'middle',fill:'#007aff','font-size':17,'font-weight':600},person.name.split(/\s+/).map(n=>n[0]).slice(0,2).join('')),roomSvg('text',{x,y:y+49,'text-anchor':'middle',fill:'#1d1d1f','font-size':15,'font-weight':500},person.name));});
+        if (!people.length) nodes.push(roomSvg('text',{x:400,y:220,'text-anchor':'middle',fill:'#86868b','font-size':17},'Your next connection starts with hello.'));
+        $('main-room-map').replaceChildren(...nodes);
+        $('main-room-connections').replaceChildren(...edges.slice().reverse().map(e=>{const item=el('div','room-connection');item.append(el('span','meta',kinds[e.kind]),el('p','',byId.get(e.source_id).name+' ↔ '+byId.get(e.target_id).name));return item;}));
+        if (!edges.length) $('main-room-connections').append(el('p','meta','No connections yet.'));
+        $('main-room-people').replaceChildren(...people.map(p=>{const item=el('div','room-person');item.append(avatar(p.name,'sm'),el('span','',p.name),el('small','meta',p.simulated?'Simulated':'Participant'));return item;}));
+      } catch(error) { $('room-map-status').textContent = error.message + ' Showing the last available map.'; }
+      finally { roomMapBusy = false; }
+    }
+    setInterval(()=>{if (!$('panel-room').hidden) refreshRoomMap();}, 5000);
     const views = ["dashboard", "contacts", "transcript", "room"];
     const viewTitles = {
       dashboard:["Conversations.","Be present. Keep the details."],
@@ -319,6 +356,8 @@
         $("panel-" + name).hidden = !selected;
       }
       $("view-title").textContent=viewTitles[view][0]; $("view-subtitle").textContent=viewTitles[view][1];
+      document.body.dataset.view = view;
+      if (view === "room") refreshRoomMap();
       if (view === "transcript") renderFullTranscript();
     }
     for (const name of views) {
