@@ -729,3 +729,8 @@ textarea { min-height:100px; resize:vertical; }
 .attention #completion-icon { background:#f5dfbd; color:#9a5a17; }
 .avatar-initials { position:relative; }
 .avatar img { z-index:1; }
+
+/* AfterHello: one greeting leads to the next. */
+.ln-title { display:inline-flex; align-items:center; gap:9px; white-space:nowrap; }
+.brand-mark { display:block; width:34px; height:34px; flex:none; }
+@media(max-width:760px) { .brand-mark { width:28px; height:28px; } .ln-title { gap:7px; } }

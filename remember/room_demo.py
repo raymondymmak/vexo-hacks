@@ -16,10 +16,11 @@ from .session import Session
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8003)
+    parser.add_argument('--lan', action='store_true', help='Allow phones on the same Wi-Fi to view the demo')
     args = parser.parse_args()
     app = create_room_app(matcher=lambda participants, speaker_id, card, marked=False:
                           match_room(participants, speaker_id, card, marked=marked, use_model=False))
-    server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=args.port, access_log=False, log_level='warning'))
+    server = uvicorn.Server(uvicorn.Config(app, host='0.0.0.0' if args.lan else '127.0.0.1', port=args.port, access_log=False, log_level='warning'))
     people = [
         {'id':'alex','name':'Alex Chen','needs':['FPGA internship'],'simulated':True},
         {'id':'priya','name':'Priya Shah','company':'Circuit Works','simulated':True},
@@ -47,7 +48,19 @@ def main():
             alex.hear("I'm Priya Shah. You should meet Sam Rivera; he is hiring FPGA interns.", speaker='1')
             alex.mark()
             alex.end()
-            print('Three simulator bands connected. Alex met Priya; intro and FPGA match sent to Alex and Sam.', flush=True)
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                states = [entry[0].state()['status'].get('room', {}) for entry in resources]
+                received = [set(item['kind'] for item in state.get('alerts', [])) for state in states]
+                acknowledged = all(not app.state.room.alerts(name)['alerts'] for name in ('alex', 'sam'))
+                if (received[0] == {'intro', 'match'} and received[2] == {'intro', 'match'}
+                        and not received[1] and acknowledged
+                        and all(state.get('queued') == 0 for state in states)):
+                    print('Verified: meeting, introduction and match; private alerts reached Alex and Sam only; simulator LEDs succeeded and alerts acknowledged.', flush=True)
+                    break
+                time.sleep(.1)
+            else:
+                raise RuntimeError('Room delivery verification timed out')
         except Exception as error:
             print('Room demo could not start: %s' % type(error).__name__, flush=True)
             server.should_exit = True
