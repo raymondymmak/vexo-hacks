@@ -238,6 +238,11 @@
       <div id="processing-stages" class="processing-grid" aria-live="polite"></div>
       <p class="meta">Stages update as work happens. Completed blocks stay visible until the next conversation.</p>
     </section>
+    <section id="room-panel" class="panel" hidden aria-labelledby="room-title">
+      <h2 id="room-title">Your room connections</h2>
+      <p id="room-status" class="meta" aria-live="polite"></p>
+      <div id="room-alerts"></div>
+    </section>
     <p id="error" role="alert" hidden></p>
     <div class="view-tabs" role="tablist" aria-label="Dashboard views">
       <button id="tab-dashboard" role="tab" aria-selected="true" aria-controls="panel-dashboard">Dashboard</button>
@@ -440,6 +445,14 @@
       $("phase").textContent = phases[status.phase] || status.phase;
       $("mode").textContent = status.mic_on ? "Live microphone · listening" : (status.extractor === "built-in" || status.sim ? "Offline / simulated capture" : "Microphone off");
       renderProcessing(status);
+      const room = status.room || {};
+      $("room-panel").hidden = !room.status || room.status === "disabled";
+      $("room-status").textContent = (room.detail || "") + (room.queued ? " · " + room.queued + " encounter(s) queued" : "");
+      $("room-alerts").replaceChildren(...(room.alerts || []).map(alert => {
+        const item = el("div", "processing-block");
+        item.append(el("h3", "", (alert.kind === "intro" ? "Introduction: " : "Suggested connection: ") + (alert.other?.name || "Someone in the room")), el("p", "", alert.reason || ""));
+        return item;
+      }));
       renderDialogue(status);
       renderFullTranscript();
       $("moments").replaceChildren(...(status.moments || []).filter(Boolean).map(m => el("li", "", m)));

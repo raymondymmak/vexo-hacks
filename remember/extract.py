@@ -51,7 +51,7 @@ INSTRUCTIONS = (
     "deadlines: dates or deadlines that were named. "
     "key_moments: the moments the wearer tapped to remember, in their words; "
     "if none were tapped, the one or two lines most worth keeping. "
-    "summary: two short sentences a person could read on a card."
+    "summary: two short sentences a person could read on a card. Preserve explicit recommendations to meet a named person, including who and why; do not invent introductions."
 )
 
 _NAME = re.compile(
@@ -218,6 +218,13 @@ class HeuristicExtractor:
             bits.append("You spoke with someone new.")
         if card["promises"]:
             bits.append("You promised to %s." % card["promises"][0]["what"])
+        # Keep explicit introduction and need/offer evidence in extracted notes.
+        for sentence in re.split(r"[.!?\n]+", other_text):
+            clean = re.sub(r"^\[[^]]+\]\s*", "", sentence).strip()
+            if re.search(r"\b(?:you should meet|introduce you to|connect you with|(?:I am|I'm) (?:hiring|looking for|seeking))\b", clean, re.I):
+                bits.append(clean[:300] + ".")
+                if len(bits) >= 4:
+                    break
         card["summary"] = " ".join(bits)
         if not card["key_moments"] and card["promises"]:
             card["key_moments"] = [card["promises"][0]["what"]]

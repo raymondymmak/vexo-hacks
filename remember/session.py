@@ -24,6 +24,7 @@ class Session:
         self.on_capture = None
         self.processing = False
         self.pipeline = {}
+        self.room = {"status": "disabled", "alerts": []}
         self.last_audio = 0
         self.partial_speaker = None
         self.error = None
@@ -299,7 +300,7 @@ class Session:
                     self.note = "Contact saved; band feedback was unavailable."
         if self.on_contact_ready is not None:
             try:
-                self.on_contact_ready(dict(person, _finished_at=getattr(closed, "finished_at", time.monotonic())))
+                self.on_contact_ready(dict(person, _finished_at=getattr(closed, "finished_at", time.monotonic()), _marked=bool(closed.moments)))
             except Exception:
                 with self.lock:
                     self.note = "Contact saved; delivery could not be queued."
@@ -313,6 +314,7 @@ class Session:
             if current.partial.strip():
                 utterances.append({"speaker": self.partial_speaker, "text": current.partial.strip(), "final": False})
         return {
+            "room": dict(self.room),
             "pipeline": {key: dict(value) for key, value in self.pipeline.items()},
             "band": self.band_label,
             "sim": self.sim,

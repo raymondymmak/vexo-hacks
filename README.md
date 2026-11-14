@@ -95,3 +95,19 @@ REMEMBER_STT=mock REMEMBER_EXTRACTOR=builtin .venv/bin/python -m unittest discov
 ```
 
 Tests use simulated input and mocked provider responses. Real-band audio, handshake detection, iCloud credentials, notification subscriptions, and final iPhone sync require separate hardware/account validation.
+
+## Phase 2: connect the room
+
+Run three simulated Vexo bands against a local room server (no speech/model/cloud calls):
+
+```sh
+.venv/bin/python -m remember.room_demo --port 8003
+```
+
+Open the printed projector link. Alex meets Priya, Priya recommends Sam, and the FPGA internship need matches Sam's hiring offer. The map shows meeting, introduction, and match edges; Alex and Sam's simulated bands flash after capture ends. This tests three separate bridges and kit simulators, not three physical bands.
+
+For a shared room, start `.venv/bin/python -m remember.room --port 8003 --lan`. The admin link can run a graph-only demo, or register participants with authenticated `POST /api/participants` (fields: `id`, `name`, optional `company`, `role`, `needs`, `offers`, `simulated`). Save each returned participant token on that participant's laptop as `REMEMBER_ROOM_TOKEN`, and set `REMEMBER_ROOM_URL` to the room server's LAN address. Start each band's normal Remember command. Each real band needs its own laptop. The projector token cannot register people, submit encounters, or read private alerts.
+
+Each bridge shares extracted encounter notes, not full transcripts or contact coordinates. Room matching resolves explicit introductions only to unambiguous registered names, and compares specific needs with offers. The deterministic matcher runs locally by default; `REMEMBER_ROOM_MATCHER=openai` optionally filters evidence-backed candidates through OpenAI. Incoming connections appear privately on the wearer dashboard. Band LEDs wait until capture ends. The room map exposes only participant names and connection types, never private match reasons.
+
+Room records persist in SQLite. Outgoing encounter summaries queue locally during outages; event IDs prevent duplicate processing. Resetting a local capture cannot recall data already shared to the room. The room admin can reset the room, which also invalidates participant tokens. Real multi-band alerts and iPhone delivery still require hardware validation; a successful notification does not establish that iCloud contact sync succeeded.

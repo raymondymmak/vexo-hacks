@@ -110,6 +110,7 @@ def main(argv=None) -> int:
     session.on_reset = flow.cancel_pending
     pipeline = None
     band = None
+    room = None
     pace = args.pace
     if pace is None:
         pace = 0.0 if args.once else 0.45
@@ -137,6 +138,22 @@ def main(argv=None) -> int:
                 handshake=args.handshake,
             )
             band.start()
+
+        room_url = os.environ.get("REMEMBER_ROOM_URL", "").strip()
+        room_token = os.environ.get("REMEMBER_ROOM_TOKEN", "").strip()
+        if room_url and room_token and not args.demo:
+            from .room_bridge import RoomBridge
+            room = RoomBridge(session, room_url, room_token, db_path=args.db,
+                              alert=lambda item: band.room_alert(item) if band else True)
+            def contact_ready(person):
+                flow.enqueue(person)
+                room.enqueue(person)
+            def reset_pending():
+                flow.cancel_pending()
+                room.reset()
+            session.on_contact_ready = contact_ready
+            session.on_reset = reset_pending
+            room.start()
 
         if args.say:
             for line in [part.strip() for part in args.say.splitlines() if part.strip()] or [args.say.strip()]:
@@ -232,6 +249,8 @@ def main(argv=None) -> int:
         uvicorn.run(app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning", access_log=False)
         return 0
     finally:
+        if room is not None:
+            room.close()
         if band is not None:
             band.shutdown()
         if pipeline is not None:

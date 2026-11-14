@@ -188,6 +188,14 @@ class BandSession:
                 flash_saved(self.band)
         threading.Thread(target=show, daemon=True).start()
 
+    def room_alert(self, _alert) -> bool:
+        """Defer room LEDs while capturing; never interrupt conversation audio."""
+        with self._capture_lock:
+            status = self.session.state()['status']
+            if status['phase'] != 'idle' or status['mic_on']:
+                return False
+            return flash_saved(self.band)
+
     def _start_mic(self) -> bool:
         """Decode the band's Opus packets to PCM and feed the Pipecat pipeline."""
         ensure_kit()
