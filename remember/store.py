@@ -70,7 +70,7 @@ class Store:
             """
         )
         columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(people)")}
-        for field in ("company", "role", "email", "phone", "contact_uid", "social_url", "delivery"):
+        for field in ("company", "role", "email", "phone", "contact_uid", "social_url", "delivery", "photo_url"):
             if field not in columns:
                 self._conn.execute(f"ALTER TABLE people ADD COLUMN {field} TEXT NOT NULL DEFAULT ''")
         if "reviewed" not in columns:
@@ -219,6 +219,17 @@ class Store:
             self._conn.commit()
             return self._person(person_id)
 
+    def set_photo(self, person_id, url, contact_uid):
+        """Attach a safe public portrait only to the same contact identity."""
+        from .profile_photo import valid_photo_url
+        if not isinstance(url, str) or (url and not valid_photo_url(url)):
+            raise ValueError("Profile photo must use LinkedIn's HTTPS image CDN.")
+        with self._lock:
+            cur = self._conn.execute("UPDATE people SET photo_url = ? WHERE id = ? AND contact_uid = ?",
+                                     (url, person_id, contact_uid))
+            self._conn.commit()
+            return self._person(person_id) if cur.rowcount else None
+
     def count(self) -> int:
         with self._lock:
             return self._conn.execute("SELECT COUNT(*) AS n FROM people").fetchone()["n"]
@@ -274,6 +285,7 @@ class Store:
             **{field: row[field] for field in ("company", "role", "email", "phone", "contact_uid")},
             "reviewed": bool(row["reviewed"]),
             "social_url": row["social_url"],
+            "photo_url": row["photo_url"],
             "delivery": _loads(row["delivery"], {}),
             "working_on": row["working_on"],
             "cares_about": _loads(row["cares_about"], []),

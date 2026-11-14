@@ -7,6 +7,7 @@ import threading
 import time
 from .delivery import DeliveryService
 from .socials import lookup_social
+from .profile_photo import fetch_profile_photo
 from .vcard import render_contact
 
 
@@ -29,12 +30,13 @@ def valid_contact_key(secret, person, key):
 
 
 class ContactFlow:
-    def __init__(self, session, *, offline=False, secret='', service=None, lookup=lookup_social):
+    def __init__(self, session, *, offline=False, secret='', service=None, lookup=lookup_social, photo_lookup=None):
         self.session = session
         self.offline = offline
         self.secret = secret
         self.service = service or DeliveryService.from_env()
         self.lookup = lookup
+        self.photo_lookup = photo_lookup or fetch_profile_photo
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='contact-delivery')
         self.futures = set()
         self._lock = threading.RLock()
@@ -124,6 +126,21 @@ class ContactFlow:
                 return
             if social and current.get('social_url', '') == person.get('social_url', ''):
                 current = dict(current, social_url=social)
+            # Persist the accepted profile before looking up its optional portrait.
+            self._publish(person, dict(delivery), generation, social)
+            profile = current.get('social_url', '')
+            if profile:
+                try:
+                    photo = self.photo_lookup(profile)
+                    with self._lock:
+                        latest = self._current(person, generation)
+                        if photo and latest and latest.get('social_url') == profile:
+                            self.session.store.set_photo(person['id'], photo, person['contact_uid'])
+                except Exception:
+                    pass  # Public portraits are optional; delivery still proceeds.
+            current = self._current(person, generation)
+            if not current:
+                return
             base = os.environ.get('REMEMBER_PUBLIC_URL', '').rstrip('/')
             fallback = (base + '/contact/%d.vcf?key=%s' % (current['id'], contact_key(self.secret, current))) if base.startswith("https://") and self.secret else None
             kwargs = {"progress": progress} if isinstance(self.service, DeliveryService) else {}

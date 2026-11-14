@@ -718,3 +718,14 @@ textarea { min-height:100px; resize:vertical; }
 /* The retained transcript stays visible beside (or below) its history selector. */
 #panel-transcript .chat .thread { display:flex; }
 @media(max-width:734px) { .band-bar .band { flex-direction:row; text-align:left; padding:12px; gap:14px; } }
+
+.completion-banner { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:17px 20px; margin:0 0 18px; border-radius:16px; background:#eef6ff; border:1px solid #b7d3f4; }
+.completion-banner strong { display:block; font-size:17px; letter-spacing:-.015em; }
+.completion-banner p { margin:4px 0 0; color:var(--text-2); font-size:13px; line-height:1.5; }
+.completion-banner.finished { background:#eef8f0; border-color:#b6dcbf; }
+.completion-banner.attention { background:#fff5e9; border-color:#e8c49b; }
+#completion-icon { display:grid; place-items:center; flex:none; width:32px; height:32px; border-radius:50%; background:#d8eafa; color:#0867bc; font-size:22px; font-weight:600; }
+.finished #completion-icon { background:#d3edd9; color:#26763a; }
+.attention #completion-icon { background:#f5dfbd; color:#9a5a17; }
+.avatar-initials { position:relative; }
+.avatar img { z-index:1; }

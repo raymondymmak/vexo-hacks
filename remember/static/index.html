@@ -68,6 +68,7 @@
       </div>
     </section>
     <p id="error" role="alert" hidden></p>
+    <section id="conversation-completion" class="completion-banner" role="status" aria-live="polite" hidden><div><strong id="completion-title"></strong><p id="completion-detail"></p></div><span id="completion-icon" aria-hidden="true"></span></section>
     <section class="panel progress-panel" aria-labelledby="processing-title">
       <div class="section-head"><h2 id="processing-title">Live processing</h2><p class="meta">From conversation to contact.</p></div>
       <div id="processing-stages" class="processing-grid" aria-live="polite"></div>
@@ -136,9 +137,28 @@
       const hash = Array.from(String(name || "")).reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 0);
       return ["#687ba1", "#7a68a4", "#b57958", "#4c8a86", "#6b8660"][hash % 5];
     }
-    function avatar(name, size = "") {
-      const node = el("div", "avatar " + size, initials(name));
-      node.style.setProperty("--av", avatarColor(name)); node.setAttribute("aria-hidden", "true"); return node;
+    function profilePhotoUrl(value) {
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" && url.hostname.endsWith(".licdn.com") && !url.username && !url.password && (!url.port || url.port === "443") ? url.href : "";
+      } catch (_) { return ""; }
+    }
+    function setAvatar(node, name, photoUrl) {
+      const safePhoto = profilePhotoUrl(photoUrl);
+      const signature = JSON.stringify([name, safePhoto]);
+      if (node.dataset.avatar === signature) return;
+      node.dataset.avatar = signature;
+      node.replaceChildren(el("span", "avatar-initials", initials(name)));
+      node.style.setProperty("--av", avatarColor(name));
+      if (safePhoto) {
+        const image = el("img", ""); image.alt = ""; image.loading = "lazy"; image.decoding = "async"; image.referrerPolicy = "no-referrer";
+        image.addEventListener("error", () => image.remove(), {once:true});
+        image.src = safePhoto; node.append(image);
+      }
+    }
+    function avatar(name, size = "", photoUrl = "") {
+      const node = el("div", "avatar " + size);
+      setAvatar(node, name, photoUrl); node.setAttribute("aria-hidden", "true"); return node;
     }
     function formatWhen(value) {
       const date = new Date(value);
@@ -182,7 +202,8 @@
     let dialogueSignature = "";
     function renderDialogue(status) {
       const turns = status.utterances || (status.transcript ? [{speaker: null, text: status.transcript, final: true}] : []);
-      const signature = JSON.stringify([turns, status.wearer_speaker]);
+      if (status.phase === "processing" && !turns.length) return;
+      const signature = JSON.stringify([turns, status.wearer_speaker, status.saved_dialogue]);
       if (signature === dialogueSignature) return;
       dialogueSignature = signature;
       const container = $("transcript");
@@ -192,13 +213,13 @@
       for (const turn of turns) {
         if (!turn.text) continue;
         const prior = groups[groups.length - 1];
-        if (prior && prior.speaker === turn.speaker && prior.final && turn.final) prior.text += " " + turn.text;
+        if (prior && prior.speaker === turn.speaker && prior.role === turn.role && prior.final && turn.final) prior.text += " " + turn.text;
         else groups.push({...turn});
       }
       container.replaceChildren();
-      if (!groups.length) container.append(el("p", "meta", "Dialogue will appear here as people speak. Speaker labels are detected automatically; choose which one is you."));
+      if (!groups.length) container.append(el("p", "meta", status.saved_dialogue ? "The transcript was not retained for this conversation." : "Dialogue will appear here as people speak. Speaker labels are detected automatically; choose which one is you."));
       for (const turn of groups) {
-        const mine = turn.speaker != null && status.wearer_speaker != null && String(turn.speaker) === String(status.wearer_speaker);
+        const mine = turn.role === "wearer" || (turn.role == null && turn.speaker != null && status.wearer_speaker != null && String(turn.speaker) === String(status.wearer_speaker));
         const bubble = el("div", "turn" + (mine ? " you" : turn.speaker == null ? " unknown" : "") + (!turn.final ? " interim" : ""));
         if (!mine && turn.speaker != null) {
           const hash = Array.from(String(turn.speaker)).reduce((n, ch) => n * 31 + ch.charCodeAt(0), 0) >>> 0;
@@ -225,7 +246,7 @@
       for (const person of knownPeople.values()) for (const conversation of person.conversations || []) {
         if (!conversation.transcript && !conversation.utterances?.length) continue;
         const id = String(conversation.id);
-        transcriptHistory.set(id, {...conversation, personName: person.name || "Someone you met", personSummary: conversation.summary || person.summary || ""});
+        transcriptHistory.set(id, {...conversation, personName: person.name || "Someone you met", personSummary: conversation.summary || person.summary || "", personPhoto: person.photo_url || ""});
         options.push(new Option(person.name + " · " + new Date(conversation.started_at).toLocaleString() + " · #" + id, id));
       }
       $("transcript-conversation").replaceChildren(...options);
@@ -245,13 +266,13 @@
     function renderHistoryList() {
       const selected = $("transcript-conversation").value;
       const entries = [{id:"live",name:"Current conversation",when:"Live",preview:(currentStatus.utterances || []).map(t=>t.text).join(" ") || "Start a conversation to capture dialogue."},
-        ...Array.from(transcriptHistory, ([id, c])=>({id,name:c.personName,when:formatWhen(c.started_at),preview:c.personSummary || c.transcript || "Saved dialogue"}))];
+        ...Array.from(transcriptHistory, ([id, c])=>({id,name:c.personName,when:formatWhen(c.started_at),preview:c.personSummary || c.transcript || "Saved dialogue",photo:c.personPhoto}))];
       $("history-list").replaceChildren(el("h3", "", "CONVERSATION HISTORY"), ...entries.map(entry=>{
         const button = el("button", "chat-item" + (entry.id === selected ? " active" : "")); button.type="button";
         button.setAttribute("aria-pressed", String(entry.id === selected));
         const content=el("span", "ci-main"), top=el("span", "ci-top");
         top.append(el("b", "", entry.name)); content.append(top,el("span", "ci-prev", entry.when),el("span", "ci-prev", entry.preview));
-        button.append(avatar(entry.name,"md"),content); button.addEventListener("click",()=>chooseTranscript(entry.id)); return button;
+        button.append(avatar(entry.name,"md",entry.photo),content); button.addEventListener("click",()=>chooseTranscript(entry.id)); return button;
       }));
     }
     function renderFullTranscript() {
@@ -265,8 +286,7 @@
       container.replaceChildren();
       $("history-title").textContent=conversation?.personName || "Current conversation";
       $("history-subtitle").textContent=conversation ? formatWhen(conversation.started_at)+" · Saved locally" : (currentStatus.phase === "talking" ? "Live dialogue · Listening" : "Live dialogue · Microphone off");
-      $("history-avatar").textContent=initials(conversation?.personName || "Live");
-      $("history-avatar").style.setProperty("--av",avatarColor(conversation?.personName || "Live"));
+      setAvatar($("history-avatar"), conversation?.personName || "Live", conversation?.personPhoto);
       $("history-summary").hidden=!conversation?.personSummary;
       $("history-summary").textContent=conversation?.personSummary || "";
       $("download-transcript").disabled = !turns.length;
@@ -332,6 +352,46 @@
         $("processing-stages").append(processingBlock(title, person?.delivery?.[id]));
       }
     }
+    function conversationLifecycle(status) {
+      // Only the current capture's save id can finish its lifecycle. An older
+      // delivery event must never replace a newer conversation's live state.
+      const pipeline = status.pipeline || {};
+      if (status.phase !== "idle" || pipeline.save?.status !== "done" || pipeline.save?.person_id == null) return null;
+      const person = knownPeople.get(pipeline.save.person_id);
+      const results = ["capture", "transcription", "extraction", "save"].map(key => pipeline[key] || {});
+      results.push(...["social", "icloud", "ntfy"].map(key => person?.delivery?.[key] || {}));
+      const failures = results.filter(result => ["error", "failed"].includes(result.status));
+      const terminal = new Set(["done", "saved", "sent", "skipped", "disabled", "not_configured"]);
+      const completed = results.every(result => terminal.has(result.status));
+      const state = failures.length ? "attention" : completed ? "finished" : "finishing";
+      return {state, person, failures};
+    }
+    function renderLifecycle(status) {
+      const lifecycle = conversationLifecycle(status);
+      const phases = {idle:"Ready to meet someone",talking:"In a conversation",processing:"Preparing contact…",error:"Something needs attention"};
+      let title = phases[status.phase] || status.phase || "Connecting";
+      $("conversation-completion").hidden = !lifecycle;
+      $("new").textContent = lifecycle ? "Start new conversation" : "Start conversation";
+      if (lifecycle) {
+        const titles = {finished:"Conversation finished",finishing:"Finishing your conversation…",attention:"Saved · needs attention"};
+        title = titles[lifecycle.state];
+        const detail = lifecycle.state === "finished" ? "Your contact and dialogue are saved locally. Each step's result is shown below. You can start a new conversation."
+          : lifecycle.state === "attention" ? "Your contact is saved locally, but a processing or delivery step failed. Check the highlighted result below."
+          : "Microphone off. Your contact is saved locally while the remaining steps finish.";
+        $("conversation-completion").className = "completion-banner " + lifecycle.state;
+        $("completion-title").textContent = title; $("completion-detail").textContent = detail;
+        $("completion-icon").textContent = lifecycle.state === "finished" ? "✓" : lifecycle.state === "attention" ? "!" : "…";
+        $("mode").textContent = "Microphone off · Saved conversation";
+        if (!pairingExpired) $("note").textContent = lifecycle.state === "finished" ? "Saved locally. Start a new conversation whenever you're ready." : lifecycle.state === "attention" ? "Saved locally. Review the failed step below; your conversation is retained." : "Microphone off. Finishing profile lookup and delivery.";
+        const conversation = lifecycle.person?.conversations?.[0];
+        if (conversation) {
+          const turns = conversation.utterances?.length ? conversation.utterances : conversation.transcript ? [{speaker:null,text:conversation.transcript,final:true,role:"unknown"}] : [];
+          renderDialogue({utterances:turns,wearer_speaker:null,saved_dialogue:true});
+        }
+      } else renderDialogue(status);
+      $("status").textContent = (status.band || "No band connected") + " · " + title;
+      $("phase").textContent = title;
+    }
     function renderAudioHealth(status) {
       const audio = status.audio_health || {};
       let message = "";
@@ -369,7 +429,7 @@
         item.append(el("h3", "", (alert.kind === "intro" ? "Introduction: " : "Suggested connection: ") + (alert.other?.name || "Someone in the room")), el("p", "", alert.reason || ""));
         return item;
       }));
-      renderDialogue(status);
+      renderLifecycle(status);
       renderFullTranscript();
       $("moments").replaceChildren(...(status.moments || []).filter(Boolean).map(m => el("li", "", m)));
       const selected = status.wearer_speaker == null ? "" : String(status.wearer_speaker);
@@ -393,6 +453,7 @@
       people.forEach(person => knownPeople.set(person.id, person));
       updateTranscriptHistory();
       renderProcessing(currentStatus);
+      renderLifecycle(currentStatus);
       const selectedContact = $("existing-contact").value;
       $("existing-contact").replaceChildren(new Option("New person", ""), ...Array.from(knownPeople.values()).map(person => new Option((person.name || "Someone you met") + " · #" + person.id, String(person.id))));
       $("existing-contact").value = knownPeople.has(Number(selectedContact)) ? selectedContact : "";
@@ -405,7 +466,7 @@
         const card = el("article", "card" + (person.id === freshId ? " is-new" : ""));
         const cardTop=el("div","card-top"), identity=el("div","card-id");
         identity.append(el("h3", "", person.name || "Someone you met"),el("p", "meta", [person.role, person.company].filter(Boolean).join(" · ") || "Contact details need review"));
-        cardTop.append(avatar(person.name),identity); card.append(cardTop);
+        cardTop.append(avatar(person.name,"",person.photo_url),identity); card.append(cardTop);
         card.append(el("span", "badge", person.reviewed ? "Reviewed" : "Captured · editable"));
         const delivery = person.delivery || {};
         const deliveryPanel = el("div", "delivery");
@@ -516,6 +577,7 @@
       source.onmessage = event => {
         try {
           const message = JSON.parse(event.data);
+          if ((message.type === "card" || message.type === "delivery") && message.person) knownPeople.set(message.person.id, message.person);
           if (message.status) renderStatus(message.status);
           if (message.type === "card" || message.type === "delivery") { freshId = message.person && message.person.id; refresh(); }
           if (message.type === "reset") { freshId = null; drafts.clear(); knownPeople.clear(); refresh(); }

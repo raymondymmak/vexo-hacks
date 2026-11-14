@@ -163,6 +163,9 @@ class GeminiSocialTests(unittest.TestCase):
 
 class FlowTests(unittest.TestCase):
     def setUp(self):
+        photo_patch = patch('remember.contact_flow.fetch_profile_photo', return_value='')
+        photo_patch.start()
+        self.addCleanup(photo_patch.stop)
         self.session=Session(':memory:', HeuristicExtractor())
         self.calls=[]
         outer=self
@@ -176,6 +179,30 @@ class FlowTests(unittest.TestCase):
     def capture(self):
         self.session.hear("I'm Maya Chen. I work at Acme.")
         return self.session.end()
+    def test_profile_photo_is_retained_and_delivered(self):
+        photo = 'https://media.licdn.com/dms/image/example/profile-displayphoto-shrink_200_200/photo'
+        flow = ContactFlow(self.session, service=self.service,
+                           lookup=lambda p: 'https://www.linkedin.com/in/maya-chen',
+                           photo_lookup=lambda url: photo)
+        self.session.on_contact_ready = flow.enqueue
+        person = self.capture()
+        flow.close()
+        self.assertEqual(self.session.store.get(person['id'])['photo_url'], photo)
+        self.assertEqual(self.calls[0][0]['photo_url'], photo)
+
+    def test_photo_failure_does_not_block_delivery(self):
+        def unavailable(url):
+            raise RuntimeError('Unavailable')
+        flow = ContactFlow(self.session, service=self.service,
+                           lookup=lambda p: 'https://www.linkedin.com/in/maya-chen',
+                           photo_lookup=unavailable)
+        self.session.on_contact_ready = flow.enqueue
+        person = self.capture()
+        flow.close()
+        stored = self.session.store.get(person['id'])
+        self.assertEqual(stored['photo_url'], '')
+        self.assertEqual(stored['delivery']['icloud']['status'], 'saved')
+
     def test_offline_never_delivers(self):
         flow=ContactFlow(self.session,offline=True,service=self.service)
         self.session.on_contact_ready=flow.enqueue
@@ -204,6 +231,9 @@ class FlowTests(unittest.TestCase):
 
 class FlowRaceTests(unittest.TestCase):
     def setUp(self):
+        photo_patch = patch('remember.contact_flow.fetch_profile_photo', return_value='')
+        photo_patch.start()
+        self.addCleanup(photo_patch.stop)
         import threading
         self.session = Session(':memory:', HeuristicExtractor())
         self.entered = threading.Event()
