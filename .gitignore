@@ -9,3 +9,6 @@ __pycache__/
 *.sqlite3
 remember.db
 .DS_Store
+
+*.sqlite-shm
+*.sqlite-wal

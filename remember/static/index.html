@@ -111,7 +111,7 @@
     <section id="panel-room" role="tabpanel" aria-labelledby="tab-room" hidden>
       <div class="room-overview"><div><h2>People in the room</h2><p id="room-map-status" class="meta" role="status">Connecting to the shared room…</p></div><span id="room-map-counts" class="room-counter"></span></div>
       <div class="room-workspace">
-        <section class="panel room-map-card" aria-label="Shared room map"><svg id="main-room-map" viewBox="0 0 800 460" role="img" aria-label="People and connections, also listed alongside the map"></svg><p class="meta room-map-caption">Connections, not physical locations. Conversation details stay private.</p></section>
+        <section class="panel room-map-card" aria-label="Shared room map"><div class="room-map-tools"><span>Room overview</span><button type="button" id="room-fullscreen" class="quiet">Full screen</button></div><svg id="main-room-map" viewBox="0 0 800 460" role="img" aria-label="People and connections, also listed alongside the map"></svg><p class="meta room-map-caption">Illustrated room, not physical locations. Conversation details stay private.</p></section>
         <section class="panel room-activity"><h2>Connections</h2><div id="main-room-connections"><p class="meta">Connections will appear when people meet.</p></div></section>
       </div>
       <div id="main-room-people" class="room-people"></div>
@@ -125,6 +125,7 @@
     <div class="dialog-head"><h2 id="tools-title">Band &amp; demo controls</h2><button id="tools-close" class="link" type="button">Done</button></div>
     <div class="dialog-body"><p class="meta">Use these controls to exercise the capture flow. Simulate handshake starts a conversation; it does not swap contacts with another band.</p><div class="actions"><button type="button" id="handshake">Simulate handshake</button><button type="button" id="demo">Play offline demo</button></div><p class="meta" style="margin-top:14px">The offline demo uses scripted conversations and does not send contacts or notifications.</p><div class="group-label">Local data</div><div class="actions"><button type="button" id="reset" class="quiet danger">Delete local contacts &amp; conversations</button></div></div>
   </dialog>
+  <script src="/static/room-visualization.js"></script>
   <script>
     const $ = id => document.getElementById(id);
     const token = new URLSearchParams(location.search).get("token") || "";
@@ -310,6 +311,10 @@
       container.scrollTop=selected === "live" && (follow || changed) ? container.scrollHeight : changed ? 0 : oldScroll;
       renderHistoryList();
     }
+    $('room-fullscreen').addEventListener('click', async () => {
+      try { if(document.fullscreenElement) await document.exitFullscreen(); else await document.querySelector('.room-map-card').requestFullscreen(); }
+      catch (_) { $('room-map-status').textContent = 'Full screen is unavailable in this browser.'; }
+    });
     let roomMapBusy = false;
     function roomSvg(tag, attrs, text) {
       const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -327,12 +332,7 @@
         const edges = (data.edges || []).filter(e=>byId.has(e.source_id)&&byId.has(e.target_id)&&kinds[e.kind]);
         $('room-map-status').textContent = data.connected ? (people.length && people.every(p=>p.simulated) ? 'Live demo · Simulated participants' : 'Live room') : data.detail;
         $('room-map-counts').textContent = people.length + ' people · ' + edges.length + ' connections';
-        const positions = new Map(people.map((p,i)=>{const a=-Math.PI/2+2*Math.PI*i/people.length;return [p.id,people.length===1?[400,210]:[400+Math.cos(a)*245,215+Math.sin(a)*135]];}));
-        const nodes=[];
-        edges.forEach((edge,i)=>{const a=positions.get(edge.source_id),b=positions.get(edge.target_id),bend=(i%3-1)*22;nodes.push(roomSvg('path',{d:`M ${a[0]} ${a[1]} Q ${(a[0]+b[0])/2+bend} ${(a[1]+b[1])/2+bend} ${b[0]} ${b[1]}`,fill:'none',stroke:colors[edge.kind],'stroke-width':2.5,'stroke-dasharray':edge.kind==='intro'?'6 5':'none'}));});
-        people.forEach(person=>{const [x,y]=positions.get(person.id);nodes.push(roomSvg('circle',{cx:x,cy:y,r:27,fill:'#f2f7ff',stroke:'#dbe9fc','stroke-width':2}),roomSvg('text',{x,y:y+6,'text-anchor':'middle',fill:'#007aff','font-size':17,'font-weight':600},person.name.split(/\s+/).map(n=>n[0]).slice(0,2).join('')),roomSvg('text',{x,y:y+49,'text-anchor':'middle',fill:'#1d1d1f','font-size':15,'font-weight':500},person.name));});
-        if (!people.length) nodes.push(roomSvg('text',{x:400,y:220,'text-anchor':'middle',fill:'#86868b','font-size':17},'Your next connection starts with hello.'));
-        $('main-room-map').replaceChildren(...nodes);
+        window.renderAfterHelloRoom($('main-room-map'), people, edges);
         $('main-room-connections').replaceChildren(...edges.slice().reverse().map(e=>{const item=el('div','room-connection');item.append(el('span','meta',kinds[e.kind]),el('p','',byId.get(e.source_id).name+' ↔ '+byId.get(e.target_id).name));return item;}));
         if (!edges.length) $('main-room-connections').append(el('p','meta','No connections yet.'));
         $('main-room-people').replaceChildren(...people.map(p=>{const item=el('div','room-person');item.append(avatar(p.name,'sm'),el('span','',p.name),el('small','meta',p.simulated?'Simulated':'Participant'));return item;}));
