@@ -28,6 +28,69 @@ class SocialTests(unittest.TestCase):
     def test_unknown_person_does_not_search(self):
         self.assertEqual(lookup_social({'name':'Sam'},api_key='test'), '')
 
+class GeminiSocialTests(unittest.TestCase):
+    URL = 'https://www.linkedin.com/in/sam-smith'
+    REDIRECT = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc'
+
+    def lookup(self, result=None, chunks=None, target=None, status=200):
+        result = dict({'url': self.URL, 'name': 'Sam Smith', 'company': 'Acme', 'confidence': 'high'}, **(result or {}))
+        if chunks is None:
+            chunks = [{'web': {'uri': self.REDIRECT, 'title': 'linkedin.com'}}]
+        self.requests = []
+        def reply(request):
+            self.requests.append(request)
+            if request.method == 'GET':
+                return httpx.Response(302, headers={'location': target or self.URL})
+            return httpx.Response(status, json={'candidates': [{
+                'content': {'parts': [{'text': '```json\n' + json.dumps(result) + '\n```'}]},
+                'groundingMetadata': {'groundingChunks': chunks}}]})
+        with httpx.Client(transport=httpx.MockTransport(reply)) as client:
+            return lookup_social({'name': 'Sam Smith', 'company': 'Acme'}, gemini_key='g-key', client=client)
+
+    def test_high_confidence_grounded_profile_is_used(self):
+        self.assertEqual(self.lookup(), self.URL)
+        post = self.requests[0]
+        self.assertIn('generativelanguage.googleapis.com', str(post.url))
+        self.assertNotIn('g-key', str(post.url))
+        self.assertEqual(post.headers['x-goog-api-key'], 'g-key')
+        body = json.loads(post.content)
+        self.assertEqual(body['tools'], [{'google_search': {}}])
+        self.assertIn('Sam Smith', body['contents'][0]['parts'][0]['text'])
+
+    def test_direct_source_and_x_profile_match(self):
+        self.assertEqual(self.lookup(chunks=[{'web': {'uri': 'https://linkedin.com/in/Sam-Smith/', 'title': 'x'}}]), self.URL)
+        x = 'https://x.com/samsmith'
+        self.assertEqual(self.lookup({'url': x}, [{'web': {'uri': self.REDIRECT, 'title': 'twitter.com'}}],
+                                     target='https://twitter.com/samsmith'), x)
+
+    def test_low_or_medium_confidence_stays_blank(self):
+        self.assertEqual(self.lookup({'confidence': 'medium'}), '')
+        self.assertEqual(self.lookup({'confidence': 'low'}), '')
+        self.assertEqual(self.lookup({'confidence': True}), '')
+        self.assertEqual(len(self.requests), 1)
+
+    def test_ungrounded_or_mismatched_profile_stays_blank(self):
+        self.assertEqual(self.lookup(chunks=[]), '')
+        self.assertEqual(self.lookup(target='https://www.linkedin.com/in/someone-else'), '')
+        self.assertEqual(self.lookup(chunks=[{'web': {'uri': self.REDIRECT, 'title': 'acme.com'}}]), '')
+        self.assertEqual(self.lookup({'company': 'Other'}), '')
+        self.assertEqual(self.lookup({'url': 'https://example.com/in/sam-smith'}), '')
+
+    def test_errors_stay_blank(self):
+        self.assertEqual(self.lookup(status=500), '')
+        self.assertEqual(self.lookup(status=429), '')
+
+    def test_gemini_key_in_environment_selects_gemini(self):
+        with patch.dict(os.environ, {'GEMINI_API_KEY': 'env-key', 'OPENAI_API_KEY': 'openai'}):
+            seen = []
+            def reply(request):
+                seen.append(request)
+                return httpx.Response(200, json={'candidates': []})
+            with httpx.Client(transport=httpx.MockTransport(reply)) as client:
+                self.assertEqual(lookup_social({'name': 'Sam Smith', 'company': 'Acme'}, client=client), '')
+            self.assertEqual(seen[0].headers['x-goog-api-key'], 'env-key')
+            self.assertEqual(lookup_social({'name': 'Sam'}), '')
+
 class FlowTests(unittest.TestCase):
     def setUp(self):
         self.session=Session(':memory:', HeuristicExtractor())

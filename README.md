@@ -72,7 +72,9 @@ For notifications, install/open ntfy on your phone and subscribe to your chosen 
 
 Optionally set `REMEMBER_PUBLIC_URL` to the base URL where your running Remember instance is reachable from the phone. Notifications can then include a contact-scoped vCard fallback link. This setting does not expose or host the server for you. Use your own reachable address; a laptop's `localhost` address will not work on a phone. Fallback links require HTTPS, expire after 15 minutes, and stop working after a server restart. They are attached only if the iCloud save fails.
 
-Social lookup is best-effort and runs only in automatic delivery mode. `REMEMBER_SOCIAL_LOOKUP=1` enables it (the default in that mode); `0` disables it. It uses name and company to seek a supported public profile with source evidence, and leaves the URL empty when uncertain or unavailable. `REMEMBER_SOCIAL_MODEL` defaults to `gpt-4.1-mini` and is configurable.
+Social lookup is best-effort and runs only in automatic delivery mode. `REMEMBER_SOCIAL_LOOKUP=1` enables it (the default in that mode); `0` disables it. It uses name and company to seek a supported public profile with source evidence, and leaves the URL empty when uncertain or unavailable.
+
+With `GEMINI_API_KEY` set, the lookup is Gemini with Google Search grounding. Gemini returns a LinkedIn or X link with a confidence level (`high`, `medium`, or `low`). The link is kept only when confidence is `high`, the name and company match, and the profile is one of the pages Google Search returned; otherwise the field stays blank. `REMEMBER_GEMINI_MODEL` defaults to `gemini-2.5-flash`. Without a Gemini key, the lookup falls back to OpenAI web search, where `REMEMBER_SOCIAL_MODEL` defaults to `gpt-4.1-mini`.
 
 The demo target is fast contact-to-phone delivery, not a guaranteed ten-second result. Displayed elapsed time starts when capture is ended and includes extraction and background enrichment/delivery; it excludes later iPhone Contacts sync. A successful server write or notification publish is not proof the phone has displayed it. Failed delivery leaves the local card and manual vCard download available.
 
