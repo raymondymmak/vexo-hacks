@@ -233,7 +233,7 @@ def main(argv=None) -> int:
 
         import secrets
         import socket
-        token = secrets.token_urlsafe(24)
+        token = os.environ.get("REMEMBER_PAIRING_TOKEN", "").strip() or secrets.token_urlsafe(24)
         app = create_app(session, play_demo=None if live else play_demo_background, pairing_token=token, download_secret=download_secret)
         if args.lan:
             try:

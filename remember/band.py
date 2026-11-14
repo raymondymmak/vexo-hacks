@@ -203,13 +203,15 @@ class BandSession:
         from vexo_open.sync import VexoError
 
         print("Loading the sound decoder (a few seconds, the first time)...")
-        if self.decoder is None:
-            self.decoder = PcmDecoder()
+        # The band restarts its packet sequence at zero on every audio start.
+        # Reusing a decoder makes its late-packet guard drop the new stream.
+        self.decoder = PcmDecoder()
         print("Note: while this runs, everything the band's microphone hears is sent over "
               "the internet to Deepgram (deepgram.com) through Pipecat. Tell the people near the band.")
 
         def on_audio(event):
             pcm = self.decoder.feed(event)
+            self.session.receive_audio(len(pcm))
             if pcm and self.pipeline is not None:
                 self.pipeline.feed_pcm(pcm)
 

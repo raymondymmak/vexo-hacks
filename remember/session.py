@@ -25,6 +25,8 @@ class Session:
         self.processing = False
         self.pipeline = {}
         self.room = {"status": "disabled", "alerts": []}
+        self.audio_health = {}
+        self._audio_published = 0
         self.last_audio = 0
         self.partial_speaker = None
         self.error = None
@@ -70,6 +72,7 @@ class Session:
             if self.processing or (audio and self.splitter.open is None):
                 return self._status()
             if audio:
+                self.audio_health["last_transcript_at"] = time.time()
                 self.last_audio = time.monotonic()
             self.splitter.hear(text, final)
             self.partial_speaker = None if final else (str(speaker) if speaker is not None else None)
@@ -78,6 +81,20 @@ class Session:
             status = self._status()
         self._publish({"type": "status", "status": status})
         return status
+
+    def receive_audio(self, decoded_bytes):
+        """Track packet/decoder health without storing audio; publish at most twice a second."""
+        with self.lock:
+            if self.splitter.open is None:
+                return
+            self.audio_health["packets"] = self.audio_health.get("packets", 0) + 1
+            self.audio_health["decoded_bytes"] = self.audio_health.get("decoded_bytes", 0) + decoded_bytes
+            self.audio_health["last_packet_at"] = time.time()
+            if time.monotonic() - self._audio_published < .5:
+                return
+            self._audio_published = time.monotonic()
+            status = self._status()
+        self._publish({"type": "status", "status": status})
 
     def mark(self) -> dict:
         with self.lock:
@@ -97,6 +114,7 @@ class Session:
                 if self.processing or self.splitter.open is not None:
                     return self._status()
                 self.pipeline = {}
+                self.audio_health = {"started_at": time.time(), "packets": 0, "decoded_bytes": 0}
                 self.splitter.open = OpenConversation()
                 self.speaker_lines = []
                 self.wearer_speaker = None
@@ -314,6 +332,7 @@ class Session:
             if current.partial.strip():
                 utterances.append({"speaker": self.partial_speaker, "text": current.partial.strip(), "final": False})
         return {
+            "audio_health": dict(self.audio_health),
             "room": dict(self.room),
             "pipeline": {key: dict(value) for key, value in self.pipeline.items()},
             "band": self.band_label,

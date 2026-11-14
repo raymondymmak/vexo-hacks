@@ -80,7 +80,7 @@
           <div><label for="wearer">Which speaker is you?</label><select id="wearer"><option value="">Not identified</option></select><p class="meta">Choose your speaker before ending so promises are attributed to you.</p></div>
         </aside>
         <section class="thread live-thread" aria-label="Live conversation">
-          <div class="thread-head"><div class="avatar md" style="--av:#007aff"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg></div><div class="th-id"><p id="phase">Ready to meet someone</p><p id="mode" class="meta">Microphone off</p></div></div>
+          <div class="thread-head"><div class="avatar md" style="--av:#007aff"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg></div><div class="th-id"><p id="phase">Ready to meet someone</p><p id="mode" class="meta">Microphone off</p><p id="audio-health" class="meta" aria-live="polite"></p></div></div>
           <div id="transcript" role="log" aria-label="Live speaker-labelled dialogue" aria-live="polite"></div>
           <ul id="moments" aria-label="Marked moments"></ul>
           <details class="typed-input"><summary>Add a line manually</summary>
@@ -120,6 +120,7 @@
     const $ = id => document.getElementById(id);
     const token = new URLSearchParams(location.search).get("token") || "";
     const drafts = new Map();
+    let eventSource = null, pairingExpired = false;
     let freshId = null, refreshVersion = 0, currentPeople = [], currentStatus = {};
     const knownPeople = new Map();
     function el(tag, className, text) {
@@ -152,6 +153,14 @@
     async function request(url, options = {}) {
       options.headers = { ...(options.headers || {}), ...(token ? {Authorization: "Bearer " + token} : {}) };
       const response = await fetch(url, options);
+      if (response.status === 401) {
+        pairingExpired = true;
+        if (eventSource) eventSource.close();
+        $("connection-pill").classList.remove("live");
+        $("connection-text").textContent = "Pairing required";
+        $("note").textContent = "This pairing link is missing or expired. Open the current paired link printed on your laptop.";
+        throw new Error($("note").textContent);
+      }
       if (!response.ok) {
         let message = response.status === 401 ? "Open the pairing link shown on your laptop to connect this phone." : "Could not complete that action.";
         try { const data = await response.json(); if (typeof data.detail === "string") message = data.detail; } catch (_) {}
@@ -323,6 +332,20 @@
         $("processing-stages").append(processingBlock(title, person?.delivery?.[id]));
       }
     }
+    function renderAudioHealth(status) {
+      const audio = status.audio_health || {};
+      let message = "";
+      if (status.mic_on) {
+        const now = Date.now() / 1000;
+        if (!audio.packets) message = "Waiting for audio from the band…";
+        else if (now - audio.last_packet_at > 5) message = "Audio stream paused. Waiting for the band…";
+        else if (!audio.decoded_bytes) message = "Audio packets arrived, but decoding has not produced sound.";
+        else if (!audio.last_transcript_at) message = "Audio is arriving · waiting for recognized speech…";
+        else message = "Audio is arriving · last words " + Math.max(0, Math.floor(now - audio.last_transcript_at)) + "s ago";
+      }
+      if ($("audio-health").textContent !== message) $("audio-health").textContent = message;
+    }
+    setInterval(() => renderAudioHealth(currentStatus), 1000);
     function renderStatus(status) {
       if (!status) return;
       if (status.phase === "talking" && currentStatus.phase !== "talking") $("transcript-conversation").value = "live";
@@ -333,6 +356,7 @@
       $("note").textContent = status.note || "Start or double-tap when you're ready. End to prepare a contact.";
       $("phase").textContent = phases[status.phase] || status.phase;
       $("mode").textContent = status.mic_on ? "Live microphone · listening" : (status.extractor === "built-in" || status.sim ? "Offline / simulated capture" : "Microphone off");
+      renderAudioHealth(status);
       renderProcessing(status);
       const room = status.room || {};
       $("room-panel").hidden = !room.status || room.status === "disabled";
@@ -487,8 +511,8 @@
       } catch (error) { showError(error); }
     }
     function connect() {
-      const source = new EventSource("/api/events" + (token ? "?token=" + encodeURIComponent(token) : ""));
-      source.onopen = () => { $("connection-pill").classList.add("live"); $("connection-text").textContent="Live"; refresh(); };
+      const source = eventSource = new EventSource("/api/events" + (token ? "?token=" + encodeURIComponent(token) : ""));
+      source.onopen = () => { if (pairingExpired) { source.close(); return; } $("connection-pill").classList.add("live"); $("connection-text").textContent="Live"; refresh(); };
       source.onmessage = event => {
         try {
           const message = JSON.parse(event.data);
@@ -497,7 +521,13 @@
           if (message.type === "reset") { freshId = null; drafts.clear(); knownPeople.clear(); refresh(); }
         } catch (error) { showError(error); }
       };
-      source.onerror = () => { $("connection-pill").classList.remove("live"); $("connection-text").textContent="Reconnecting"; $("note").textContent = "Connection interrupted. Reconnecting…"; };
+      source.onerror = () => {
+        if (pairingExpired) return;
+        $("connection-pill").classList.remove("live");
+        $("connection-text").textContent="Reconnecting";
+        $("note").textContent = "Dashboard connection interrupted. The band may still be recording. Reconnecting…";
+        refresh(); // Distinguish an expired pairing link from a temporary stream interruption.
+      };
     }
     for (const [id, url] of [["new", "/api/start"], ["mark", "/api/mark"], ["handshake", "/api/handshake"], ["demo", "/api/demo"]]) {
       $(id).addEventListener("click", () => action(url).catch(showError));

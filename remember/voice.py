@@ -299,6 +299,7 @@ class VoicePipeline:
         async def _on_error(_worker, _frame):
             print("Problem (speech): the transcription pipeline reported an error. "
                   "You can still type a line on the page.")
+            session.progress("transcription", "error", "Speech recognition reported a connection error. Reconnect the band if words do not resume.")
 
     def start(self, timeout: float = 15) -> None:
         self._thread = threading.Thread(target=self._thread_main, name="remember-voice", daemon=True)

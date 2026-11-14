@@ -4,6 +4,7 @@ import os
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 os.environ["REMEMBER_STT"] = "mock"
@@ -48,6 +49,31 @@ class BandTests(unittest.TestCase):
                 fake.configure.assert_called_with(audio=False, mic_level=False)
                 self.assertFalse(session.state()["status"]["mic_on"])
         session.close()
+
+    def test_audio_restart_resets_decoder_sequence_without_duplicate_handler(self):
+        session = Session(":memory:", extractor=HeuristicExtractor())
+        pipeline = MagicMock()
+        fake = MagicMock()
+        fake.name = 'Test band'
+        bridge = BandSession(session, number=None, sim=True, listen=True, pipeline=pipeline)
+        bridge.band = fake
+        try:
+            bridge._capture(True)
+            on_audio = next(call.args[1] for call in fake.on.call_args_list if call.args[0] == 'audio')
+            first_decoder = bridge.decoder
+            on_audio(SimpleNamespace(opus=b'\xf8\xff\xfe', seq=123))
+            self.assertGreater(len(pipeline.feed_pcm.call_args.args[0]), 0)
+            pipeline.feed_pcm.reset_mock()
+            bridge._capture(False)
+            bridge._capture(True)
+            self.assertIsNot(bridge.decoder, first_decoder)
+            # Firmware restarts at zero; the old decoder rejects this as late.
+            on_audio(SimpleNamespace(opus=b'\xf8\xff\xfe', seq=0))
+            pipeline.feed_pcm.assert_called_once()
+            self.assertGreater(len(pipeline.feed_pcm.call_args.args[0]), 0)
+            self.assertEqual(len([call for call in fake.on.call_args_list if call.args[0] == 'audio']), 1)
+        finally:
+            session.close()
 
     def test_handshake_cannot_split_an_active_conversation(self):
         session = Session(":memory:", extractor=HeuristicExtractor())
