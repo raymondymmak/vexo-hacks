@@ -10,7 +10,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 KIT = ROOT / "vexo-open-kit"
-_KEY_NAMES = ("DEEPGRAM_API_KEY", "OPENAI_API_KEY", "OPENAI_MODEL")
+_KEY_NAMES = (
+    "DEEPGRAM_API_KEY", "OPENAI_API_KEY", "OPENAI_MODEL",
+    "REMEMBER_AUTO_DELIVER", "ICLOUD_USERNAME", "ICLOUD_APP_PASSWORD",
+    "ICLOUD_ADDRESSBOOK_URL", "NTFY_URL", "NTFY_TOKEN", "REMEMBER_PUBLIC_URL",
+    "REMEMBER_SOCIAL_LOOKUP", "REMEMBER_SOCIAL_MODEL",
+)
 
 
 class KitMissing(RuntimeError):
@@ -32,7 +37,7 @@ def ensure_kit() -> Path:
 
 
 def load_dotenv() -> None:
-    """Copy DEEPGRAM_API_KEY and OPENAI_API_KEY from .env into the environment.
+    """Load supported speech and delivery settings from .env into the environment.
 
     An existing environment variable wins. Values are never printed.
     The kit's helpers also read .env from the folder you start the program in.
