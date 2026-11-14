@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -20,6 +21,7 @@ class TextIn(BaseModel):
 
 def create_app(session, play_demo=None, pairing_token=None, download_secret=None) -> FastAPI:
     app = FastAPI(title="Remember")
+    app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
     app.state.session = session
     app.state.play_demo = play_demo
 
