@@ -1,0 +1,9 @@
+# Python 3.11 or newer. Pipecat 1.16 does not install on 3.9 or 3.10.
+pipecat-ai[deepgram]==1.16.0
+fastapi==0.115.6
+uvicorn==0.32.1
+httpx>=0.27.2,<1
+av>=14
+
+# A real band over Bluetooth also needs:  python3 -m pip install bleak
+# The pretend band (--sim) does not. scripts/setup.sh clones the kit; do not pip-install it.

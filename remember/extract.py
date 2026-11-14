@@ -1,0 +1,270 @@
+"""Turn one conversation into a person card.
+
+With an OpenAI key this is one structured-output call through the kit's ai.extract.
+Without a key, a small built-in reader fills the same fields so the demo and the
+tests still run. Tapped moments are always kept.
+"""
+
+import os
+import re
+
+# Every field is required and additional properties are off: that is what
+# OpenAI strict structured output asks for, and what the kit's ai.extract sends.
+CARD_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["name", "working_on", "cares_about", "promises", "deadlines", "key_moments", "summary"],
+    "properties": {
+        "name": {"type": "string"},
+        "working_on": {"type": "string"},
+        "cares_about": {"type": "array", "items": {"type": "string"}},
+        "promises": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["what", "by_when"],
+                "properties": {
+                    "what": {"type": "string"},
+                    "by_when": {"type": "string"},
+                },
+            },
+        },
+        "deadlines": {"type": "array", "items": {"type": "string"}},
+        "key_moments": {"type": "array", "items": {"type": "string"}},
+        "summary": {"type": "string"},
+    },
+}
+
+INSTRUCTIONS = (
+    "Fill a card about the other person in this conversation. The wearer of the band is \"I\". "
+    "Use only facts that were said. "
+    "name: the other person's name, or an empty string if they never gave it. "
+    "working_on: what they are building or doing, as a short phrase, or empty. "
+    "cares_about: short phrases for topics they care about. "
+    "promises: things the wearer promised to do for them. what is the promise, "
+    "by_when is the deadline they named, or empty. "
+    "deadlines: dates or deadlines that were named. "
+    "key_moments: the moments the wearer tapped to remember, in their words; "
+    "if none were tapped, the one or two lines most worth keeping. "
+    "summary: two short sentences a person could read on a card."
+)
+
+_NAME = re.compile(
+    r"(?i:\b(?:i am|i['’]m|my name is|this is|it is|it['’]s)\s+)"
+    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})"
+)
+_WORKING = (
+    ("i'm working on", re.compile(r"\bi'm working on\s+([^.]*)", re.I)),
+    ("i am working on", re.compile(r"\bi am working on\s+([^.]*)", re.I)),
+    ("i'm building", re.compile(r"\bi'm building\s+([^.]*)", re.I)),
+    ("i am building", re.compile(r"\bi am building\s+([^.]*)", re.I)),
+    ("working on", re.compile(r"\bworking on\s+([^.]*)", re.I)),
+    ("building", re.compile(r"\bbuilding\s+([^.]*)", re.I)),
+)
+_CARES = re.compile(r"\bi care about\s+([^.]*)", re.I)
+_PROMISE = re.compile(r"[^.?!]*(?:\bi'll\b|\bi will\b|\bi promised\b)[^.?!]*[.?!]?", re.I)
+_DEADLINE = re.compile(
+    r"\b(?:by\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|tonight|next week)\b",
+    re.I,
+)
+_PROMISE_LEAD = re.compile(r"^(?:i'll|i will|i promised)\s+", re.I)
+_BLANK_NAMES = {"", "unknown", "someone", "someone you met"}
+
+
+def blank_card() -> dict:
+    return {
+        "name": "",
+        "working_on": "",
+        "cares_about": [],
+        "promises": [],
+        "deadlines": [],
+        "key_moments": [],
+        "summary": "",
+    }
+
+
+def _clean_list(values, limit: int = 8) -> list:
+    found = []
+    seen = set()
+    for value in values or []:
+        text = " ".join(str(value).split())
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(text[:300])
+        if len(found) >= limit:
+            break
+    return found
+
+
+def normalize_card(raw) -> dict:
+    """Force the extractor's answer into the card shape. Extra fields are dropped."""
+    card = blank_card()
+    if not isinstance(raw, dict):
+        return card
+    card["name"] = " ".join(str(raw.get("name") or "").split())[:80]
+    if card["name"].casefold() in _BLANK_NAMES:
+        card["name"] = ""
+    card["working_on"] = " ".join(str(raw.get("working_on") or "").split())[:240]
+    card["summary"] = " ".join(str(raw.get("summary") or "").split())[:500]
+    card["cares_about"] = _clean_list(raw.get("cares_about"))
+    card["deadlines"] = _clean_list(raw.get("deadlines"))
+    card["key_moments"] = _clean_list(raw.get("key_moments"))
+    promises = []
+    for item in raw.get("promises") or []:
+        if isinstance(item, str):
+            what, by_when = item, ""
+        elif isinstance(item, dict):
+            what = item.get("what") or ""
+            by_when = item.get("by_when") or ""
+        else:
+            continue
+        what = " ".join(str(what).split())[:240]
+        by_when = " ".join(str(by_when).split())[:80]
+        if what:
+            promises.append({"what": what, "by_when": by_when})
+    card["promises"] = promises[:8]
+    return card
+
+
+def attach_moments(card: dict, moments: list) -> dict:
+    """Tapped moments stay on the card even if the model did not repeat them."""
+    card = normalize_card(card)
+    merged = list(card["key_moments"])
+    for moment in moments or []:
+        text = " ".join(str(moment).split())[:300]
+        if text and text.casefold() not in {item.casefold() for item in merged}:
+            merged.append(text)
+    card["key_moments"] = merged[:8]
+    return card
+
+
+def _topics(text: str) -> list:
+    parts = re.split(r",|\band\b", text)
+    return _clean_list(part.strip(" .") for part in parts)
+
+
+def _deadlines(text: str) -> list:
+    found = []
+    for match in _DEADLINE.finditer(text):
+        phrase = " ".join(match.group(0).split())
+        if phrase.casefold() not in {item.casefold() for item in found}:
+            found.append(phrase)
+    return found
+
+
+class HeuristicExtractor:
+    """Read the obvious facts out of a conversation. No network, no key."""
+
+    label = "built-in"
+
+    def extract(self, transcript: str, moments=None) -> dict:
+        text = (transcript or "").strip()
+        card = blank_card()
+        name = _NAME.search(text)
+        if name:
+            card["name"] = name.group(1)
+        for _label, pattern in _WORKING:
+            found = pattern.search(text)
+            if found:
+                card["working_on"] = " ".join(found.group(1).split())
+                break
+        cares = []
+        for match in _CARES.finditer(text):
+            cares.extend(_topics(match.group(1)))
+        card["cares_about"] = _clean_list(cares)
+        card["deadlines"] = _deadlines(text)
+        for match in _PROMISE.finditer(text):
+            sentence = " ".join(match.group(0).split()).strip()
+            if not sentence:
+                continue
+            what = _PROMISE_LEAD.sub("", sentence).strip(" .")
+            when = ""
+            whens = _deadlines(sentence)
+            if whens:
+                when = whens[-1]
+                when = re.sub(r"^by\s+", "", when, flags=re.I)
+            if what:
+                card["promises"].append({"what": what, "by_when": when})
+        bits = []
+        if card["name"] and card["working_on"]:
+            bits.append("%s is working on %s." % (card["name"], card["working_on"]))
+        elif card["name"]:
+            bits.append("You spoke with %s." % card["name"])
+        else:
+            bits.append("You spoke with someone new.")
+        if card["promises"]:
+            bits.append("You promised to %s." % card["promises"][0]["what"])
+        card["summary"] = " ".join(bits)
+        if not card["key_moments"] and card["promises"]:
+            card["key_moments"] = [card["promises"][0]["what"]]
+        return attach_moments(card, moments)
+
+
+class OpenAIExtractor:
+    """One structured-output call per conversation, through the kit's ai.extract."""
+
+    label = "openai"
+
+    def __init__(self, extract_fn=None) -> None:
+        self._extract_fn = extract_fn
+
+    def _call(self, text: str):
+        if self._extract_fn is not None:
+            return self._extract_fn(text, CARD_SCHEMA, INSTRUCTIONS)
+        from .kitpath import ensure_kit
+        ensure_kit()
+        import ai
+        return ai.extract(text, CARD_SCHEMA, INSTRUCTIONS)
+
+    def extract(self, transcript: str, moments=None) -> dict:
+        text = (transcript or "").strip()
+        kept = [" ".join(str(moment).split()) for moment in (moments or []) if str(moment).strip()]
+        if kept:
+            text += "\n\nThe wearer tapped the band to remember these moments:\n"
+            text += "\n".join("- " + moment for moment in kept)
+        if not text:
+            return attach_moments(blank_card(), moments)
+        try:
+            raw = self._call(text)
+        except Exception as error:
+            # The kit raises VexoError (code "ai") with a sentence and no key in it.
+            code = getattr(error, "code", None)
+            message = getattr(error, "message", None) or str(error)
+            if code:
+                print("Problem (%s): %s" % (code, message))
+            else:
+                print("Problem (ai): The card could not be read. Using the built-in extractor.")
+            print("Using the built-in extractor for this conversation.")
+            return HeuristicExtractor().extract(transcript, moments)
+        return attach_moments(raw, moments)
+
+
+def openai_available() -> bool:
+    """True when the kit is present and an OpenAI key is set. The key is not printed."""
+    if os.environ.get("REMEMBER_EXTRACTOR", "").strip().lower() == "builtin":
+        return False
+    try:
+        from .kitpath import ensure_kit
+        ensure_kit()
+        import ai
+    except Exception:
+        return False
+    try:
+        ai.key()
+    except Exception:
+        return False
+    return True
+
+
+def make_extractor(available=None):
+    """The OpenAI extractor when a key is available, otherwise the built-in reader."""
+    if available is None:
+        available = openai_available()
+    if available:
+        return OpenAIExtractor()
+    return HeuristicExtractor()

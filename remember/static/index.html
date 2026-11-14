@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Remember</title>
+  <style>
+    :root {
+      --paper: #f3efe6;
+      --ink: #1c1915;
+      --muted: #5e584f;
+      --line: #e3dacb;
+      --card: #fffdf8;
+      --green: #0e5c45;
+      --green-soft: #e5f3ec;
+      --rust: #8f3412;
+      --rust-soft: #fde8dc;
+      --shadow: 0 16px 40px rgba(48, 32, 12, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 400px at 10% -10%, #fff8ec 0%, transparent 50%),
+        var(--paper);
+      font: 16px/1.45 "Avenir Next", "Segoe UI", sans-serif;
+    }
+    header, main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-end;
+      padding: 28px 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      margin: 0 0 4px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: var(--green);
+    }
+    h1 {
+      margin: 0;
+      font: 56px/0.95 Palatino, "Iowan Old Style", Georgia, serif;
+      font-weight: 600;
+    }
+    .tag { margin: 8px 0 0; color: var(--muted); }
+    form[role="search"] { min-width: min(320px, 100%); }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input[type="search"], input[type="text"] {
+      width: 100%;
+      border: 1px solid #d9d0c2;
+      background: white;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 12px 16px;
+      font: inherit;
+    }
+    input:focus { outline: 2px solid var(--green); border-color: transparent; }
+    .live {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 0;
+    }
+    #status, #note { margin: 0; }
+    #note { color: var(--muted); font-size: 14px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    button {
+      border: 1px solid #d4cbbd;
+      background: white;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--ink); }
+    button.primary { background: var(--green); color: white; border-color: var(--green); }
+    button.quiet { background: transparent; }
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 22px;
+      padding-bottom: 48px;
+    }
+    .now, .board {
+      background: transparent;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    #transcript {
+      min-height: 96px;
+      white-space: pre-wrap;
+      margin: 8px 0;
+    }
+    #moments { list-style: none; padding: 0; margin: 0 0 12px; }
+    #moments li {
+      background: var(--green-soft);
+      color: var(--green);
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin-top: 6px;
+      font-size: 14px;
+    }
+    .say { display: flex; gap: 8px; }
+    .say input { border-radius: 12px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px 16px 14px;
+      box-shadow: var(--shadow);
+    }
+    .card.is-new { outline: 2px solid var(--green); }
+    .card h3 {
+      margin: 0;
+      font: 28px/1.1 Palatino, Georgia, serif;
+    }
+    .meta { margin: 4px 0 8px; color: var(--muted); font-size: 13px; }
+    .summary { margin: 0 0 10px; }
+    .working { margin: 0 0 10px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+    .chip {
+      background: #f6f1e8;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 13px;
+    }
+    .promises { list-style: none; padding: 0; margin: 0; }
+    .promises li {
+      background: var(--rust-soft);
+      color: var(--rust);
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin-top: 6px;
+      font-size: 14px;
+    }
+    .moments { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+    .empty { color: var(--muted); margin: 8px 0 0; }
+    @media (max-width: 800px) {
+      header, .live, .layout { display: block; }
+      h1 { font-size: 42px; }
+      .actions { margin-top: 12px; }
+      .layout { display: block; }
+      .now { margin-bottom: 18px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .card.is-new { outline: 2px solid var(--green); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">Vexo Open</p>
+      <h1>Remember</h1>
+      <p class="tag">You remember people. They remember you.</p>
+    </div>
+    <form role="search" id="search-form">
+      <label for="q">Recall a person or a topic</label>
+      <input id="q" type="search" placeholder="Maya, drones, Friday" autocomplete="off">
+    </form>
+  </header>
+  <main>
+    <section class="live">
+      <div>
+        <p id="status">Starting.</p>
+        <p id="note"></p>
+      </div>
+      <div class="actions">
+        <button type="button" id="new" class="primary">New person</button>
+        <button type="button" id="mark">Mark this</button>
+        <button type="button" id="end">End conversation</button>
+        <button type="button" id="demo">Play demo</button>
+        <button type="button" id="reset" class="quiet">Reset demo</button>
+      </div>
+    </section>
+    <div class="layout">
+      <section class="now">
+        <h2>This conversation</h2>
+        <div class="panel">
+          <p id="phase" class="meta">Idle</p>
+          <p id="transcript"></p>
+          <ul id="moments"></ul>
+          <form class="say" id="say-form">
+            <label class="visually" for="line" style="position:absolute;left:-999px">Add a line</label>
+            <input id="line" type="text" placeholder="Type a line they said" maxlength="4000">
+            <button type="submit">Add</button>
+          </form>
+        </div>
+      </section>
+      <section class="board">
+        <h2>People</h2>
+        <div id="cards" class="cards" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const statusEl = document.getElementById("status");
+    const noteEl = document.getElementById("note");
+    const phaseEl = document.getElementById("phase");
+    const transcriptEl = document.getElementById("transcript");
+    const momentsEl = document.getElementById("moments");
+    const cardsEl = document.getElementById("cards");
+    const queryEl = document.getElementById("q");
+    let freshId = null;
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    }
+
+    function renderStatus(status) {
+      if (!status) return;
+      const phase = status.phase === "talking" ? "In a conversation" : "Between people";
+      statusEl.textContent = status.band + " · " + phase;
+      noteEl.textContent = status.note || "";
+      phaseEl.textContent = phase;
+      transcriptEl.textContent = status.transcript || "Nothing yet. Double-tap when you meet someone, or type a line.";
+      momentsEl.replaceChildren();
+      (status.moments || []).forEach(function (moment) {
+        if (!moment) return;
+        momentsEl.appendChild(el("li", "", moment));
+      });
+    }
+
+    function renderCards(people) {
+      cardsEl.replaceChildren();
+      if (!people.length) {
+        const empty = el("p", "empty", queryEl.value
+          ? "No one matches that."
+          : "No cards yet. Play the demo, or end a conversation to save one.");
+        cardsEl.appendChild(empty);
+        return;
+      }
+      people.forEach(function (person) {
+        const card = el("article", "card" + (person.id === freshId ? " is-new" : ""));
+        card.appendChild(el("h3", "", person.name));
+        const meetings = person.conversation_count === 1 ? "1 conversation" : person.conversation_count + " conversations";
+        card.appendChild(el("p", "meta", meetings));
+        if (person.summary) card.appendChild(el("p", "summary", person.summary));
+        if (person.working_on) card.appendChild(el("p", "working", "Working on " + person.working_on));
+        if (person.cares_about && person.cares_about.length) {
+          const chips = el("div", "chips");
+          person.cares_about.forEach(function (topic) { chips.appendChild(el("span", "chip", topic)); });
+          card.appendChild(chips);
+        }
+        if (person.promises && person.promises.length) {
+          const list = el("ul", "promises");
+          person.promises.forEach(function (promise) {
+            const when = promise.by_when ? " · " + promise.by_when : "";
+            list.appendChild(el("li", "", promise.what + when));
+          });
+          card.appendChild(list);
+        }
+        if (person.key_moments && person.key_moments.length) {
+          card.appendChild(el("p", "moments", person.key_moments[0]));
+        }
+        cardsEl.appendChild(card);
+      });
+    }
+
+    async function refresh() {
+      const response = await fetch("/api/state?q=" + encodeURIComponent(queryEl.value || ""));
+      const data = await response.json();
+      renderStatus(data.status);
+      renderCards(data.people || []);
+    }
+
+    async function post(url, body) {
+      const options = { method: "POST", headers: { "Content-Type": "application/json" } };
+      if (body) options.body = JSON.stringify(body);
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        let detail = "That did not work.";
+        try { detail = (await response.json()).detail || detail; } catch (error) { /* keep detail */ }
+        noteEl.textContent = detail;
+      }
+      return response;
+    }
+
+    function connect() {
+      const source = new EventSource("/api/events");
+      source.onmessage = function (event) {
+        const message = JSON.parse(event.data);
+        if (message.type === "status") renderStatus(message.status);
+        if (message.type === "card") {
+          freshId = message.person && message.person.id;
+          renderStatus(message.status);
+          refresh();
+        }
+        if (message.type === "reset") {
+          freshId = null;
+          renderStatus(message.status);
+          refresh();
+        }
+      };
+      source.onerror = function () {
+        source.close();
+        setTimeout(connect, 1000);
+      };
+    }
+
+    document.getElementById("search-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      refresh();
+    });
+    queryEl.addEventListener("input", function () { refresh(); });
+    document.getElementById("new").addEventListener("click", function () { post("/api/new"); });
+    document.getElementById("mark").addEventListener("click", function () { post("/api/mark"); });
+    document.getElementById("end").addEventListener("click", function () { post("/api/end"); });
+    document.getElementById("demo").addEventListener("click", function () { post("/api/demo"); });
+    document.getElementById("reset").addEventListener("click", function () {
+      if (window.confirm("Clear every card from this demo?")) post("/api/reset");
+    });
+    document.getElementById("say-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      const text = document.getElementById("line").value;
+      document.getElementById("line").value = "";
+      post("/api/say", { text: text });
+    });
+
+    connect();
+    refresh();
+  </script>
+</body>
+</html>
