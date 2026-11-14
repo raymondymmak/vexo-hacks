@@ -124,7 +124,8 @@ class FlowTests(unittest.TestCase):
         self.assertIn('/contact/',self.calls[0][2])
         stored=self.session.store.get(person['id'])
         self.assertEqual(stored['delivery']['icloud']['status'],'saved')
-        self.assertEqual(stored['conversations'][0]['transcript'],'')
+        self.assertIn('Maya', stored['conversations'][0]['transcript'])
+        self.assertNotIn('[unknown]', self.calls[0][1])
         client=TestClient(create_app(self.session,pairing_token='pair',download_secret='secret'))
         route='/contact/%d.vcf' % person['id']
         self.assertEqual(client.get(route).status_code,404)

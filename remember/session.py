@@ -11,8 +11,9 @@ from .store import Store
 
 
 class Session:
-    def __init__(self, db_path, extractor=None) -> None:
+    def __init__(self, db_path, extractor=None, retain_transcripts=True) -> None:
         self.store = Store(db_path)
+        self.retain_transcripts = retain_transcripts
         self.extractor = extractor if extractor is not None else make_extractor()
         self.splitter = Splitter()
         self.lock = threading.Lock()
@@ -170,6 +171,9 @@ class Session:
                                   else "speaker " + who if who is not None else "unknown", text)
                     for who, text in lines)
             try:
+                closed.utterances = [{"speaker": who, "text": text, "final": True,
+                                      "role": "wearer" if wearer is not None and who == wearer else "other" if who is not None else "unknown"}
+                                     for who, text in lines]
                 closed.finished_at = finished_at
                 person = self._finish(closed, person_id=person_id)
                 with self.lock:
@@ -248,11 +252,12 @@ class Session:
     def _finish(self, closed, person_id=None):
         card = self.extractor.extract(closed.transcript, closed.moments)
         card = attach_moments(card, closed.moments)
-        # Taps guide extraction, but raw quotes and transcripts are transient.
+        # Keep transcript history locally; contact summaries and exports omit it.
         card["key_moments"] = []
         person = self.store.merge(
             card,
-            transcript="",
+            transcript=closed.transcript if self.retain_transcripts else "",
+            utterances=getattr(closed, "utterances", []) if self.retain_transcripts else [],
             moments=[],
             started_at=closed.started_at,
             ended_at=closed.ended_at,

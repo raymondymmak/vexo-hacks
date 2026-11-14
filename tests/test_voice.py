@@ -61,7 +61,7 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("soil sensor", person["working_on"])
         self.assertEqual(person["promises"], [])
         self.assertEqual(person["key_moments"], [])
-        self.assertEqual(person["conversations"][0]["transcript"], "")
+        self.assertIn("Maya", person["conversations"][0]["transcript"])
         self.assertGreater(self.pipeline.stt.audio_bytes, 0)
         self.assertEqual(self.pipeline.processor.speakers, ["0", "1", "0"])
 

@@ -111,6 +111,11 @@
       display: flex; flex-direction: column; gap: 10px;
       max-height: 420px; overflow-y: auto; margin: 12px 0; padding: 4px;
     }
+    .view-tabs { display:flex; gap:8px; margin:18px 0; border-bottom:1px solid var(--line); padding-bottom:10px; }
+    .view-tabs [aria-selected="true"] { background:var(--green); color:white; }
+    [hidden] { display:none !important; }
+    #full-transcript { display:flex; flex-direction:column; gap:12px; margin-top:16px; }
+    #full-transcript .turn { max-width:90%; }
     .turn { align-self: flex-start; max-width: 88%; border: 1px solid #d9e2f0; border-left: 4px solid var(--speaker-color, #64748b); border-radius: 14px; background: #f1f5fb; padding: 10px 13px; }
     .turn.you { align-self: flex-end; background: var(--green-soft); border-color: #b5d9bd; --speaker-color: var(--green); }
     .turn.unknown { background: #f4f4f3; border-color: #d4d4d4; }
@@ -222,7 +227,11 @@
       </div>
     </section>
     <p id="error" role="alert" hidden></p>
-    <div class="layout">
+    <div class="view-tabs" role="tablist" aria-label="Dashboard views">
+      <button id="tab-dashboard" role="tab" aria-selected="true" aria-controls="panel-dashboard">Dashboard</button>
+      <button id="tab-transcript" role="tab" aria-selected="false" aria-controls="panel-transcript" tabindex="-1">Full transcript</button>
+    </div>
+    <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" class="layout">
       <section class="now">
         <h2>This conversation</h2>
         <div class="panel">
@@ -251,6 +260,14 @@
         <div id="cards" class="cards" aria-live="polite"></div>
       </section>
     </div>
+    <section id="panel-transcript" class="panel" role="tabpanel" aria-labelledby="tab-transcript" hidden>
+      <h2>Full transcript</h2>
+      <p id="transcript-retention" class="meta">Full transcripts are saved locally with each conversation. They are not included in iCloud contacts or notifications.</p>
+      <label for="transcript-conversation">Conversation</label>
+      <select id="transcript-conversation"><option value="live">Current conversation</option></select>
+      <button id="download-transcript" type="button">Download transcript (.txt)</button>
+      <div id="full-transcript" role="log" aria-label="Full speaker-labelled transcript" aria-live="polite"></div>
+    </section>
   </main>
   <script>
     const $ = id => document.getElementById(id);
@@ -321,8 +338,73 @@
       }
       container.scrollTop = follow ? container.scrollHeight : oldScroll;
     }
+    const transcriptHistory = new Map();
+    function transcriptTurns() {
+      const selected = $("transcript-conversation").value;
+      if (selected === "live") return currentStatus.utterances || [];
+      const conversation = transcriptHistory.get(selected);
+      return conversation ? conversation.utterances?.length ? conversation.utterances : conversation.transcript ? [{speaker:null,text:conversation.transcript,final:true,role:"unknown"}] : [] : [];
+    }
+    function updateTranscriptHistory() {
+      const selected = $("transcript-conversation").value;
+      transcriptHistory.clear();
+      const options = [new Option("Current conversation", "live")];
+      for (const person of knownPeople.values()) for (const conversation of person.conversations || []) {
+        if (!conversation.transcript && !conversation.utterances?.length) continue;
+        const id = String(conversation.id);
+        transcriptHistory.set(id, conversation);
+        options.push(new Option(person.name + " · " + new Date(conversation.started_at).toLocaleString() + " · #" + id, id));
+      }
+      $("transcript-conversation").replaceChildren(...options);
+      $("transcript-conversation").value = transcriptHistory.has(selected) ? selected : (currentStatus.phase !== "talking" && options.length > 1 ? options[1].value : "live");
+      renderFullTranscript();
+    }
+    $("transcript-conversation").addEventListener("change", renderFullTranscript);
+    function turnLabel(turn) {
+      return turn.role === "wearer" || (turn.role == null && turn.speaker != null && currentStatus.wearer_speaker != null && String(turn.speaker) === String(currentStatus.wearer_speaker))
+        ? "You · " + speakerName(turn.speaker) : speakerName(turn.speaker);
+    }
+    function renderFullTranscript() {
+      const turns = transcriptTurns();
+      const container = $("full-transcript");
+      container.replaceChildren();
+      $("download-transcript").disabled = !turns.length;
+      if (!turns.length) container.append(el("p", "meta", "Start a conversation to see the full dialogue here."));
+      for (const turn of turns) {
+        const mine = turnLabel(turn).startsWith("You · ");
+        const bubble = el("div", "turn" + (mine ? " you" : turn.speaker == null ? " unknown" : "") + (!turn.final ? " interim" : ""));
+        bubble.append(el("div", "turn-label", turnLabel(turn)), el("p", "turn-text", turn.text));
+        if (!turn.final) bubble.append(el("div", "turn-hint", "Transcribing…"));
+        container.append(bubble);
+      }
+    }
+    function selectView(view) {
+      for (const name of ["dashboard", "transcript"]) {
+        const selected = name === view;
+        $("tab-" + name).setAttribute("aria-selected", String(selected));
+        $("tab-" + name).tabIndex = selected ? 0 : -1;
+        $("panel-" + name).hidden = !selected;
+      }
+      if (view === "transcript") renderFullTranscript();
+    }
+    for (const name of ["dashboard", "transcript"]) {
+      $("tab-" + name).addEventListener("click", () => selectView(name));
+      $("tab-" + name).addEventListener("keydown", event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === "Home" ? "dashboard" : event.key === "End" ? "transcript" : name === "dashboard" ? "transcript" : "dashboard";
+        selectView(next); $("tab-" + next).focus();
+      });
+    }
+    $("download-transcript").addEventListener("click", () => {
+      const text = transcriptTurns().map(turn => turnLabel(turn) + (turn.final ? "" : " [in progress]") + ":\n" + turn.text).join("\n\n");
+      const url = URL.createObjectURL(new Blob([text], {type:"text/plain;charset=utf-8"}));
+      const link = el("a", ""); link.href = url; link.download = "remember-transcript.txt";
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
     function renderStatus(status) {
       if (!status) return;
+      if (status.phase === "talking" && currentStatus.phase !== "talking") $("transcript-conversation").value = "live";
       currentStatus = status;
       const phases = {idle: "Ready to meet someone", talking: "In a conversation", processing: "Preparing contact…", error: "Something needs attention"};
       $("status").textContent = (status.band || "No band connected") + " · " + (phases[status.phase] || status.phase);
@@ -330,6 +412,7 @@
       $("phase").textContent = phases[status.phase] || status.phase;
       $("mode").textContent = status.mic_on ? "Live microphone · listening" : (status.extractor === "built-in" || status.sim ? "Offline / simulated capture" : "Microphone off");
       renderDialogue(status);
+      renderFullTranscript();
       $("moments").replaceChildren(...(status.moments || []).filter(Boolean).map(m => el("li", "", m)));
       const selected = status.wearer_speaker == null ? "" : String(status.wearer_speaker);
       const labels = (status.speakers || []).map(s => String(typeof s === "object" ? (s.label ?? s.id) : s));
@@ -349,6 +432,7 @@
     function renderCards(people) {
       currentPeople = people;
       people.forEach(person => knownPeople.set(person.id, person));
+      updateTranscriptHistory();
       const selectedContact = $("existing-contact").value;
       $("existing-contact").replaceChildren(new Option("New person", ""), ...Array.from(knownPeople.values()).map(person => new Option((person.name || "Someone you met") + " · #" + person.id, String(person.id))));
       $("existing-contact").value = knownPeople.has(Number(selectedContact)) ? selectedContact : "";

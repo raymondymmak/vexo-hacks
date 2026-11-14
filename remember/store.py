@@ -77,6 +77,9 @@ class Store:
             self._conn.execute("ALTER TABLE people ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0")
         for row in self._conn.execute("SELECT id FROM people WHERE contact_uid = ''").fetchall():
             self._conn.execute("UPDATE people SET contact_uid = ? WHERE id = ?", (str(uuid.uuid4()), row["id"]))
+        conversation_columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(conversations)")}
+        if "utterances" not in conversation_columns:
+            self._conn.execute("ALTER TABLE conversations ADD COLUMN utterances TEXT NOT NULL DEFAULT '[]'")
         self._conn.commit()
 
     def close(self) -> None:
@@ -90,7 +93,7 @@ class Store:
             self._conn.execute("DELETE FROM people")
             self._conn.commit()
 
-    def merge(self, card: dict, transcript: str, moments: list, started_at: str, ended_at: str, person_id=None) -> dict:
+    def merge(self, card: dict, transcript: str, moments: list, started_at: str, ended_at: str, person_id=None, utterances=None) -> dict:
         """Save a distinct encounter, or append to an explicitly confirmed person ID."""
         name = " ".join(str(card.get("name") or "").split())
         named = bool(name)
@@ -149,6 +152,7 @@ class Store:
                 (person_id, transcript or "", summary, json.dumps(moment_list), started_at, ended_at),
             )
             conversation_id = cur.lastrowid
+            self._conn.execute("UPDATE conversations SET utterances = ? WHERE id = ?", (json.dumps(utterances or []), conversation_id))
             existing = {
                 _name_key(item["what"])
                 for item in self._conn.execute(
@@ -288,6 +292,7 @@ class Store:
                     "started_at": item["started_at"],
                     "ended_at": item["ended_at"],
                     "transcript": item["transcript"],
+                    "utterances": _loads(item["utterances"], []),
                 }
                 for item in conversations
             ],

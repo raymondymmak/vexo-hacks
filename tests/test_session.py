@@ -21,7 +21,7 @@ class Reader:
 class SessionTests(unittest.TestCase):
     def setUp(self):
         self.reader = Reader()
-        self.session = Session(':memory:', self.reader)
+        self.session = Session(':memory:', self.reader, retain_transcripts=False)
 
     def tearDown(self):
         self.session.close()

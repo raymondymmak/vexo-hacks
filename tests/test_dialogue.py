@@ -35,3 +35,26 @@ class DialogueTests(unittest.TestCase):
             self.assertEqual(session.state()['status']['utterances'],[])
         finally:
             session.close()
+
+    def test_saved_transcript_survives_restart_and_is_not_in_vcard(self):
+        import tempfile
+        from remember.vcard import render_contact
+        with tempfile.NamedTemporaryFile(suffix='.sqlite') as file:
+            session=Session(file.name,HeuristicExtractor())
+            session.start()
+            session.hear("I'm Maya Chen.",speaker='1')
+            session.hear('A unique sentence for the full transcript.',speaker='0')
+            session.set_wearer('0')
+            person=session.end()
+            session.close()
+            reopened=Session(file.name,HeuristicExtractor())
+            try:
+                saved=reopened.store.get(person['id'])
+                dialogue=saved['conversations'][0]['utterances']
+                self.assertEqual(dialogue[0]['speaker'],'1')
+                self.assertEqual(dialogue[1]['role'],'wearer')
+                self.assertIn('unique sentence',saved['conversations'][0]['transcript'])
+                self.assertNotIn('unique sentence',render_contact(saved))
+                self.assertEqual(reopened.state()['status']['utterances'],[])
+            finally:
+                reopened.close()

@@ -80,7 +80,7 @@ The demo target is fast contact-to-phone delivery, not a guaranteed ten-second r
 
 ## Data and tests
 
-New captures keep raw transcript text in memory for the active conversation and extraction. New raw transcripts are not persisted; saved contacts, generated summaries, attributed promises, and delivery status remain in SQLite. Raw tapped quotes are discarded too. Existing databases are migrated additively; historical transcript rows are not erased. Use the app's reset only when you intend to delete all saved contacts and conversations.
+The Full transcript tab shows live speaker-labelled dialogue and saved conversation history, with a text download. Full transcripts are retained locally in SQLite after saving, including speaker labels and wearer attribution. They are not included in iCloud vCards, social lookup queries, or ntfy notifications. Discard capture removes only the current unsaved dialogue; Reset deletes local saved contacts and conversations. Previously discarded transcripts cannot be recovered. Existing databases are migrated additively.
 
 Audio flow:
 
