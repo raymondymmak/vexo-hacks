@@ -1,8 +1,8 @@
-# Remember
+# AfterHello
 
 Meet someone. Remember them on your phone.
 
-One Vexo Open band captures a conversation through Pipecat and Deepgram. End the conversation to create a contact with their name, company, role, contact details, notes, and attributed promises. With automatic delivery configured, Remember saves the contact to iCloud through CardDAV and sends an ntfy notification. A downloadable vCard is always available as a fallback.
+One Vexo Open band captures a conversation through Pipecat and Deepgram. End the conversation to create a contact with their name, company, role, contact details, notes, and attributed promises. With automatic delivery configured, AfterHello saves the contact to iCloud through CardDAV and sends an ntfy notification. A downloadable vCard is always available as a fallback.
 
 This version is one-to-one capture with one wearer. It does not exchange contacts between bands or match people across a room.
 
@@ -68,9 +68,9 @@ For iCloud:
 2. Generate an app-specific password in your Apple Account and enter it as `ICLOUD_APP_PASSWORD`; enter your account username as `ICLOUD_USERNAME`. Apple requires two-factor authentication for app-specific passwords: [Apple's setup instructions](https://support.apple.com/en-us/102654).
 3. Leave `ICLOUD_ADDRESSBOOK_URL` empty for discovery. If multiple address books require a selection, set it to the intended HTTPS iCloud address-book collection URL.
 
-For notifications, install/open ntfy on your phone and subscribe to your chosen topic yourself. Set `NTFY_URL` to its full HTTPS topic URL, and set `NTFY_TOKEN` when your server/topic requires authentication. Remember publishes to that topic; it does not subscribe the phone automatically.
+For notifications, install/open ntfy on your phone and subscribe to your chosen topic yourself. Set `NTFY_URL` to its full HTTPS topic URL, and set `NTFY_TOKEN` when your server/topic requires authentication. AfterHello publishes to that topic; it does not subscribe the phone automatically.
 
-Optionally set `REMEMBER_PUBLIC_URL` to the base URL where your running Remember instance is reachable from the phone. Notifications can then include a contact-scoped vCard fallback link. This setting does not expose or host the server for you. Use your own reachable address; a laptop's `localhost` address will not work on a phone. Fallback links require HTTPS, expire after 15 minutes, and stop working after a server restart. They are attached only if the iCloud save fails.
+Optionally set `REMEMBER_PUBLIC_URL` to the base URL where your running AfterHello instance is reachable from the phone. Notifications can then include a contact-scoped vCard fallback link. This setting does not expose or host the server for you. Use your own reachable address; a laptop's `localhost` address will not work on a phone. Fallback links require HTTPS, expire after 15 minutes, and stop working after a server restart. They are attached only if the iCloud save fails.
 
 Social lookup is best-effort for live captures. `REMEMBER_SOCIAL_LOOKUP=1` enables it (the default); `0` disables it. It uses the supplied name and extracted contextual facts to seek a supported public LinkedIn profile, and leaves the URL empty when uncertain or unavailable. Offline demos never search.
 
@@ -106,13 +106,13 @@ Run three simulated Vexo bands against a local room server (no speech/model/clou
 
 Open the printed projector link. Alex meets Priya, Priya recommends Sam, and the FPGA internship need matches Sam's hiring offer. The map shows meeting, introduction, and match edges; Alex and Sam's simulated bands flash after capture ends. This tests three separate bridges and kit simulators, not three physical bands.
 
-For a shared room, start `.venv/bin/python -m remember.room --port 8003 --lan`. The admin link can run a graph-only demo, or register participants with authenticated `POST /api/participants` (fields: `id`, `name`, optional `company`, `role`, `needs`, `offers`, `simulated`). Save each returned participant token on that participant's laptop as `REMEMBER_ROOM_TOKEN`, and set `REMEMBER_ROOM_URL` to the room server's LAN address. Start each band's normal Remember command. Each real band needs its own laptop. The projector token cannot register people, submit encounters, or read private alerts.
+For a shared room, start `.venv/bin/python -m remember.room --port 8003 --lan`. The admin link can run a graph-only demo, or register participants with authenticated `POST /api/participants` (fields: `id`, `name`, optional `company`, `role`, `needs`, `offers`, `simulated`). Save each returned participant token on that participant's laptop as `REMEMBER_ROOM_TOKEN`, and set `REMEMBER_ROOM_URL` to the room server's LAN address. Start each band's normal AfterHello command. Each real band needs its own laptop. The projector token cannot register people, submit encounters, or read private alerts.
 
 Each bridge shares extracted encounter notes, not full transcripts or contact coordinates. Room matching resolves explicit introductions only to unambiguous registered names, and compares specific needs with offers. The deterministic matcher runs locally by default; `REMEMBER_ROOM_MATCHER=openai` optionally filters evidence-backed candidates through OpenAI. Incoming connections appear privately on the wearer dashboard. Band LEDs wait until capture ends. The room map exposes only participant names and connection types, never private match reasons.
 
 Room records persist in SQLite. Outgoing encounter summaries queue locally during outages; event IDs prevent duplicate processing. Resetting a local capture cannot recall data already shared to the room. The room admin can reset the room, which also invalidates participant tokens. Real multi-band alerts and iPhone delivery still require hardware validation; a successful notification does not establish that iCloud contact sync succeeded.
 
-The main dashboard adapts the visual design from `claude/remember-web-app` (a1bfd27) onto the existing Remember backend: Conversations, Contacts, Full transcript, and private Room connections. It retains paired access, live processing stages, saved dialogue, editing, and vCard/text downloads. The separate `remember-web` backend is not required.
+The main dashboard adapts the visual design from `claude/remember-web-app` (a1bfd27) onto the existing AfterHello backend: Conversations, Contacts, Full transcript, and private Room connections. It retains paired access, live processing stages, saved dialogue, editing, and vCard/text downloads. The separate `remember-web` backend is not required.
 
 ### LinkedIn regression checks
 

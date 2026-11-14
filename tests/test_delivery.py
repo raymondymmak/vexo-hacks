@@ -114,7 +114,7 @@ class DeliveryTests(unittest.TestCase):
             calls.append(request)
             if request.method == 'PUT':
                 return httpx.Response(503, text='SECRET leaked by provider')
-            self.assertIn('ready in Remember', request.content.decode())
+            self.assertIn('ready in AfterHello', request.content.decode())
             self.assertEqual(request.headers['Click'], 'https://remember.example/contact')
             return httpx.Response(200)
         result = self.service(handler, addressbook_url=BOOK, ntfy_url='https://ntfy.sh/topic').deliver(PERSON, VCARD, 'https://remember.example/contact')

@@ -20,7 +20,7 @@ class TextIn(BaseModel):
 
 
 def create_app(session, play_demo=None, pairing_token=None, download_secret=None) -> FastAPI:
-    app = FastAPI(title="Remember")
+    app = FastAPI(title="AfterHello")
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
     app.state.session = session
     app.state.play_demo = play_demo

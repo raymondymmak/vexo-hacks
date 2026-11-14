@@ -258,7 +258,7 @@ def create_room_app(db_path=':memory:', *, admin_token=None, projector_token=Non
         yield
         room.close()
 
-    app = FastAPI(title='Remember room', lifespan=lifespan)
+    app = FastAPI(title='AfterHello room', lifespan=lifespan)
     app.state.room = room
     app.state.admin_token = admin_token
     app.state.projector_token = projector_token
@@ -341,7 +341,7 @@ def create_room_app(db_path=':memory:', *, admin_token=None, projector_token=Non
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Remember shared room server')
+    parser = argparse.ArgumentParser(description='AfterHello shared room server')
     parser.add_argument('--db', default='remember-room.sqlite')
     parser.add_argument('--port', type=int, default=8003)
     parser.add_argument('--lan', action='store_true')

@@ -33,7 +33,7 @@ class WebTests(unittest.TestCase):
         page = self.client.get("/")
         self.assertEqual(page.status_code, 200)
         self.assertNotIn("innerHTML", page.text)
-        self.assertIn("Remember", page.text)
+        self.assertIn("AfterHello", page.text)
         said = self.client.post("/api/say", json={"text": "Hi, I'm Maya Chen. I'm working on a soil sensor."})
         self.assertEqual(said.status_code, 200)
         self.client.post("/api/mark")

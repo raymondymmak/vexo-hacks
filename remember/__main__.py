@@ -1,4 +1,4 @@
-"""Remember: you remember people. They remember you.
+"""AfterHello: you remember people. They remember you.
 
     python3 -m remember --sim --demo
     python3 -m remember NUMBER

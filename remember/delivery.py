@@ -223,13 +223,13 @@ class DeliveryService:
         parts = urlsplit(self.ntfy_url)
         if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password:
             raise DeliveryError('NTFY_URL must be an HTTPS topic URL.')
-        headers = {'Title': 'Remember', 'Content-Type': 'text/plain; charset=utf-8'}
+        headers = {'Title': 'AfterHello', 'Content-Type': 'text/plain; charset=utf-8'}
         if self.ntfy_token:
             headers['Authorization'] = 'Bearer ' + self.ntfy_token
         if fallback_url and not saved:
             target = urlsplit(fallback_url)
             if target.scheme == 'https' and target.hostname and '\n' not in fallback_url and '\r' not in fallback_url:
                 headers['Click'] = fallback_url
-        message = 'Your new contact was saved to iCloud.' if saved else 'Your new contact is ready in Remember.'
+        message = 'Your new contact was saved to iCloud.' if saved else 'Your new contact is ready in AfterHello.'
         response = await client.post(self.ntfy_url, headers=headers, content=message.encode())
         response.raise_for_status()
