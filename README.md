@@ -72,9 +72,9 @@ For notifications, install/open ntfy on your phone and subscribe to your chosen 
 
 Optionally set `REMEMBER_PUBLIC_URL` to the base URL where your running Remember instance is reachable from the phone. Notifications can then include a contact-scoped vCard fallback link. This setting does not expose or host the server for you. Use your own reachable address; a laptop's `localhost` address will not work on a phone. Fallback links require HTTPS, expire after 15 minutes, and stop working after a server restart. They are attached only if the iCloud save fails.
 
-Social lookup is best-effort and runs only in automatic delivery mode. `REMEMBER_SOCIAL_LOOKUP=1` enables it (the default in that mode); `0` disables it. It uses name and company to seek a supported public profile with source evidence, and leaves the URL empty when uncertain or unavailable.
+Social lookup is best-effort for live captures. `REMEMBER_SOCIAL_LOOKUP=1` enables it (the default); `0` disables it. It uses the supplied name and extracted contextual facts to seek a supported public LinkedIn profile, and leaves the URL empty when uncertain or unavailable. Offline demos never search.
 
-With `GEMINI_API_KEY` set, Gemini uses Google Search grounding to find a personal LinkedIn profile after the conversation ends. It receives extracted name, company, role, project, and summary context (not the full transcript), and is prompted to refine searches with those clues. Without a company, at least two contextual fields must match. The URL must be present in search sources and the model must report high confidence; ambiguous results stay blank. Source matching does not independently verify every identity claim, so review the result. `REMEMBER_GEMINI_MODEL` defaults to `gemini-3.8-flash`. Without a Gemini key, lookup falls back to OpenAI web search with `REMEMBER_SOCIAL_MODEL` defaulting to `gpt-4.1-mini`. Lookup errors are displayed separately from no-match results.
+With `GEMINI_API_KEY` set, Gemini uses Google Search grounding to find a personal LinkedIn profile after the conversation ends. It receives extracted name, company, role, project, and summary context (not the full transcript), and is prompted to refine searches with those clues. Without a company, at least two contextual fields must match. The URL must be present in search sources and the model must report high confidence; ambiguous results stay blank. Source matching does not independently verify every identity claim, so review the result. `REMEMBER_GEMINI_MODEL` defaults to `gemini-3.5-flash-lite`. When Gemini has no validated result (or no Gemini key is configured), lookup falls back to OpenAI web search with `REMEMBER_SOCIAL_MODEL` defaulting to `gpt-4.1-mini`. Cited prose is normalized in a separate JSON step while retaining the original sources for URL validation. First names can match discovered full names when context supports them; regional LinkedIn URLs are normalized to www.linkedin.com. Lookup errors are displayed separately from no-match results.
 
 The Live processing blocks show capture, final transcription, extraction (including built-in fallback), local save, LinkedIn lookup, iCloud sync, and phone notification. Each delivery result remains attached to its contact, so a later conversation does not inherit an earlier job's status.
 
@@ -113,3 +113,17 @@ Each bridge shares extracted encounter notes, not full transcripts or contact co
 Room records persist in SQLite. Outgoing encounter summaries queue locally during outages; event IDs prevent duplicate processing. Resetting a local capture cannot recall data already shared to the room. The room admin can reset the room, which also invalidates participant tokens. Real multi-band alerts and iPhone delivery still require hardware validation; a successful notification does not establish that iCloud contact sync succeeded.
 
 The main dashboard adapts the visual design from `claude/remember-web-app` (a1bfd27) onto the existing Remember backend: Conversations, Contacts, Full transcript, and private Room connections. It retains paired access, live processing stages, saved dialogue, editing, and vCard/text downloads. The separate `remember-web` backend is not required.
+
+### LinkedIn regression checks
+
+`tests/test_linkedin_profiles.py` covers Raymond Mak and Timothy Do using first-name-plus-context inputs, exact expected URLs, and rejection of missing citations, low confidence, conflicting names, or insufficient context. These offline tests mock provider output; expected surnames and profile URLs are never injected into the search input.
+
+Run the separate live discovery check explicitly:
+
+```sh
+.venv/bin/python scripts/check_linkedin_live.py
+# Or one case:
+.venv/bin/python scripts/check_linkedin_live.py --case timothy_do
+```
+
+This calls the configured providers and reports the actual URL, elapsed time, and whether it matches the expected profile. It does not modify contacts or send notifications. Fixture context comes from the confirmed LinkedIn profile and Timothy's public resume, with source URLs recorded in the fixture. Live search can change over time; the checker reports failure rather than substituting the expected URL.

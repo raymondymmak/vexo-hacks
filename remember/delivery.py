@@ -193,8 +193,13 @@ class DeliveryService:
             try:
                 response = await self._dav(client, 'PUT', url, content=body,
                     headers={'Content-Type': 'text/vcard; charset=utf-8', 'If-None-Match': '*'})
-                if response.status_code == 412:
+                if response.status_code in (412, 403):
+                    # Some CardDAV servers reject create-if-absent on an existing
+                    # resource with 403. Read it and require UID + strong ETag
+                    # before attempting the same safe update used for 412.
                     current = await self._dav(client, 'GET', url)
+                    if response.status_code == 403 and current.status_code != 200:
+                        response.raise_for_status()
                     current.raise_for_status()
                     if _uid(current.text) != uid:
                         raise DeliveryError('A different contact already exists at that address.')

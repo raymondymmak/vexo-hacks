@@ -73,6 +73,20 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(result['icloud']['status'], 'saved')
         self.assertEqual([r.method for r in calls], ['PUT', 'GET'])
 
+    def test_existing_contact_403_uses_uid_checked_conditional_update(self):
+        requests = []
+        def reply(request):
+            requests.append(request)
+            if request.method == 'GET':
+                return httpx.Response(200, text=VCARD, headers={'ETag': '"v1"'})
+            if 'if-match' in request.headers:
+                self.assertEqual(request.headers['if-match'], '"v1"')
+                return httpx.Response(204)
+            return httpx.Response(403)
+        result = self.service(reply, addressbook_url=BOOK).deliver(PERSON, VCARD.replace('END:VCARD', 'URL:https://www.linkedin.com/in/example\r\nEND:VCARD'))
+        self.assertEqual(result['icloud']['status'], 'saved')
+        self.assertEqual([r.method for r in requests], ['PUT', 'GET', 'PUT'])
+
     def test_existing_contact_update_uses_etag(self):
         calls = []
         def handler(request):

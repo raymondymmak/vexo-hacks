@@ -1,0 +1,26 @@
+[
+  {
+    "id": "raymond_mak",
+    "full_name": "Raymond Mak",
+    "person": {
+      "name": "Raymond",
+      "role": "First-year EECS major at Berkeley",
+      "working_on": "Firmware",
+      "summary": "Raymond is a first-year EECS major at Berkeley from Hong Kong. He is working on firmware."
+    },
+    "expected_url": "https://www.linkedin.com/in/raymondymmak",
+    "context_source": "https://hk.linkedin.com/in/raymondymmak"
+  },
+  {
+    "id": "timothy_do",
+    "full_name": "Timothy Do",
+    "person": {
+      "name": "Timothy",
+      "role": "Electrical and computer engineering graduate specializing in signal processing",
+      "working_on": "Embedded systems and image processing",
+      "summary": "Timothy is based in San Jose, earned an MS in Electrical and Computer Engineering at UCLA in 2024 and a BS in Electrical Engineering at UC Irvine in 2023."
+    },
+    "expected_url": "https://www.linkedin.com/in/do-timothy",
+    "context_source": "https://timothydo.me/Resume_TimothyDo.pdf"
+  }
+]

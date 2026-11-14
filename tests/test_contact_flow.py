@@ -80,6 +80,58 @@ class GeminiSocialTests(unittest.TestCase):
         self.assertEqual(self.lookup(status=500), '')
         self.assertEqual(self.lookup(status=429), '')
 
+    def test_first_name_and_context_accept_grounded_regional_profile(self):
+        person = {'name': 'Sam', 'role': 'EECS student at Berkeley', 'summary': 'First-year student from Hong Kong'}
+        url = 'https://hk.linkedin.com/in/sam-smith?trk=search'
+        def reply(request):
+            result = {'url': url, 'name': 'Sam Smith', 'confidence': 'high',
+                      'matched_context': {'role': person['role'], 'summary': person['summary']}}
+            return httpx.Response(200, json={'candidates': [{'content': {'parts': [{'text': json.dumps(result)}]},
+                'groundingMetadata': {'groundingChunks': [{'web': {'uri': url}}]}}]})
+        with httpx.Client(transport=httpx.MockTransport(reply)) as client:
+            self.assertEqual(lookup_social(person, gemini_key='test', client=client), self.URL)
+
+    def test_gemini_timeout_uses_cited_search_fallback(self):
+        seen = []
+        def reply(request):
+            seen.append(request.url.host)
+            if request.url.host == 'generativelanguage.googleapis.com':
+                raise httpx.ReadTimeout('test', request=request)
+            result = {'url': self.URL, 'name': 'Sam Smith', 'company': 'Acme', 'confident': True}
+            return httpx.Response(200, json={'output': [
+                {'action': {'sources': [{'url': self.URL}]}},
+                {'content': [{'type': 'output_text', 'text': json.dumps(result)}]}]})
+        with httpx.Client(transport=httpx.MockTransport(reply)) as client:
+            errors = []
+            self.assertEqual(lookup_social({'name': 'Sam Smith', 'company': 'Acme'}, gemini_key='g', api_key='o', client=client, on_error=errors.append), self.URL)
+            self.assertEqual(errors, [])
+            self.assertEqual(seen, ['generativelanguage.googleapis.com', 'api.openai.com'])
+
+    def test_cited_prose_is_structured_without_losing_source_validation(self):
+        seen = []
+        def reply(request):
+            body = json.loads(request.content); seen.append(body)
+            if body.get('tools'):
+                return httpx.Response(200, json={'output': [
+                    {'action': {'sources': [{'url': self.URL}]}},
+                    {'content': [{'type': 'output_text', 'text': 'Sam Smith at Acme: ' + self.URL}]}]})
+            self.assertEqual(body['text']['format']['type'], 'json_object')
+            result = {'url': self.URL, 'name': 'Sam Smith', 'company': 'Acme', 'confident': True}
+            return httpx.Response(200, json={'output': [{'content': [{'type': 'output_text', 'text': json.dumps(result)}]}]})
+        with httpx.Client(transport=httpx.MockTransport(reply)) as client:
+            self.assertEqual(lookup_social({'name': 'Sam Smith', 'company': 'Acme'}, api_key='test', client=client), self.URL)
+        self.assertEqual(len(seen), 2)
+
+    def test_timeout_is_reported_explicitly(self):
+        errors = []
+        def timeout(request):
+            raise httpx.ReadTimeout('test', request=request)
+        with httpx.Client(transport=httpx.MockTransport(timeout)) as client:
+            result = lookup_social({'name': 'Sam Smith', 'company': 'Acme'}, gemini_key='test', client=client, on_error=errors.append)
+        self.assertEqual(result, '')
+        self.assertIn('timed out', errors[0])
+        self.assertNotIn('unreadable', errors[0])
+
     def test_context_can_identify_linkedin_without_company(self):
         person = {'name': 'Sam Smith', 'role': 'Robotics engineer', 'working_on': 'Underwater inspection drones',
                   'transcript': 'PRIVATE RAW WORDS', 'email': 'private@example.com'}
