@@ -196,6 +196,13 @@
     @media (prefers-reduced-motion: reduce) {
       .card.is-new { outline: 2px solid var(--green); }
     }
+    .processing-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:14px 0; }
+    .processing-block { border:1px solid var(--line,#ddd); border-radius:12px; padding:12px; background:var(--paper,#fff); }
+    .processing-block.active { border-color:#247c86; background:#edf9fa; }
+    .processing-block.error { border-color:#a33636; background:#fff1f1; }
+    .processing-block.done, .processing-block.saved, .processing-block.sent { border-color:#388456; }
+    .processing-block h3 { font-size:14px; margin:0 0 6px; }
+    .processing-block p { margin:4px 0; font-size:13px; }
   </style>
 </head>
 <body>
@@ -225,6 +232,11 @@
         <button type="button" id="demo">Play offline demo</button>
         <button type="button" id="reset" class="quiet">Reset demo</button>
       </div>
+    </section>
+    <section class="panel" aria-labelledby="processing-title">
+      <h2 id="processing-title">Live processing</h2>
+      <div id="processing-stages" class="processing-grid" aria-live="polite"></div>
+      <p class="meta">Stages update as work happens. Completed blocks stay visible until the next conversation.</p>
     </section>
     <p id="error" role="alert" hidden></p>
     <div class="view-tabs" role="tablist" aria-label="Dashboard views">
@@ -402,6 +414,22 @@
       const link = el("a", ""); link.href = url; link.download = "remember-transcript.txt";
       document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
+    function processingBlock(title, result = {}) {
+      const state = result.status || "waiting";
+      const labels = {waiting:"Waiting", pending:"Queued", active:"In progress", done:"Complete", saved:"Saved", sent:"Sent", error:"Failed", skipped:"Skipped", disabled:"Disabled", not_configured:"Not configured"};
+      const block = el("div", "processing-block " + state);
+      block.append(el("h3", "", title), el("p", "", labels[state] || state));
+      if (result.detail || result.error) block.append(el("p", "meta", result.error || result.detail));
+      return block;
+    }
+    function renderProcessing(status) {
+      const stages = [["capture", "1 · Capture dialogue"], ["transcription", "2 · Finish transcription"], ["extraction", "3 · Extract contact details"], ["save", "4 · Save locally"]];
+      $("processing-stages").replaceChildren(...stages.map(([id,title]) => processingBlock(title, (status.pipeline || {})[id])));
+      const person = knownPeople.get(status.pipeline?.save?.person_id);
+      for (const [id,title] of [["social","5 · Find LinkedIn"],["icloud","6 · Sync iCloud"],["ntfy","7 · Notify phone"]]) {
+        $("processing-stages").append(processingBlock(title, person?.delivery?.[id]));
+      }
+    }
     function renderStatus(status) {
       if (!status) return;
       if (status.phase === "talking" && currentStatus.phase !== "talking") $("transcript-conversation").value = "live";
@@ -411,6 +439,7 @@
       $("note").textContent = status.note || "Start or double-tap when you're ready. End to prepare a contact.";
       $("phase").textContent = phases[status.phase] || status.phase;
       $("mode").textContent = status.mic_on ? "Live microphone · listening" : (status.extractor === "built-in" || status.sim ? "Offline / simulated capture" : "Microphone off");
+      renderProcessing(status);
       renderDialogue(status);
       renderFullTranscript();
       $("moments").replaceChildren(...(status.moments || []).filter(Boolean).map(m => el("li", "", m)));
@@ -433,6 +462,7 @@
       currentPeople = people;
       people.forEach(person => knownPeople.set(person.id, person));
       updateTranscriptHistory();
+      renderProcessing(currentStatus);
       const selectedContact = $("existing-contact").value;
       $("existing-contact").replaceChildren(new Option("New person", ""), ...Array.from(knownPeople.values()).map(person => new Option((person.name || "Someone you met") + " · #" + person.id, String(person.id))));
       $("existing-contact").value = knownPeople.has(Number(selectedContact)) ? selectedContact : "";
@@ -449,13 +479,12 @@
         const delivery = person.delivery || {};
         const deliveryPanel = el("div", "delivery");
         deliveryPanel.setAttribute("aria-live", "polite");
-        for (const [channel, title] of [["icloud", "iCloud contact"], ["ntfy", "Phone notification"]]) {
+        const deliveryStages = el("div", "processing-grid");
+        for (const [channel, title] of [["social", "5 · Find LinkedIn"], ["icloud", "6 · Sync iCloud"], ["ntfy", "7 · Notify phone"]]) {
           const result = delivery[channel] || {};
-          const labels = {pending: "Sending…", saved: "Saved to iCloud", error: "Delivery failed", not_configured: "Not configured", sent: channel === "icloud" ? "Sent to iCloud" : "Notification sent", disabled: "Not configured / disabled", failed: "Delivery failed", skipped: "Not sent"};
-          const label = labels[result.status] || "Not sent";
-          deliveryPanel.append(el("p", "meta", title + ": " + label));
-          if (result.error) deliveryPanel.append(el("p", "delivery-error", String(result.error)));
+          deliveryStages.append(processingBlock(title, result));
         }
+        deliveryPanel.append(deliveryStages);
         if (Number.isFinite(delivery.elapsed_seconds)) deliveryPanel.append(el("p", "meta", "Delivery processing: " + delivery.elapsed_seconds.toFixed(1) + " seconds"));
         deliveryPanel.append(el("p", "meta", "Phone sync depends on iCloud and your notification setup. Offline demos do not sync contacts."));
         card.append(deliveryPanel);
@@ -463,7 +492,7 @@
           try {
             const url = new URL(person.social_url);
             if (["https:", "http:"].includes(url.protocol)) {
-              const social = el("a", "social", "View social profile");
+              const social = el("a", "social", "View LinkedIn profile");
               social.href = url.href; social.target = "_blank"; social.rel = "noopener noreferrer"; card.append(social);
             }
           } catch (_) {}

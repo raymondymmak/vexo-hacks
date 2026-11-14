@@ -57,11 +57,11 @@ class GeminiSocialTests(unittest.TestCase):
         self.assertEqual(body['tools'], [{'google_search': {}}])
         self.assertIn('Sam Smith', body['contents'][0]['parts'][0]['text'])
 
-    def test_direct_source_and_x_profile_match(self):
+    def test_direct_source_matches_but_x_profile_is_rejected(self):
         self.assertEqual(self.lookup(chunks=[{'web': {'uri': 'https://linkedin.com/in/Sam-Smith/', 'title': 'x'}}]), self.URL)
         x = 'https://x.com/samsmith'
         self.assertEqual(self.lookup({'url': x}, [{'web': {'uri': self.REDIRECT, 'title': 'twitter.com'}}],
-                                     target='https://twitter.com/samsmith'), x)
+                                     target='https://twitter.com/samsmith'), '')
 
     def test_low_or_medium_confidence_stays_blank(self):
         self.assertEqual(self.lookup({'confidence': 'medium'}), '')
@@ -72,13 +72,31 @@ class GeminiSocialTests(unittest.TestCase):
     def test_ungrounded_or_mismatched_profile_stays_blank(self):
         self.assertEqual(self.lookup(chunks=[]), '')
         self.assertEqual(self.lookup(target='https://www.linkedin.com/in/someone-else'), '')
-        self.assertEqual(self.lookup(chunks=[{'web': {'uri': self.REDIRECT, 'title': 'acme.com'}}]), '')
+        self.assertEqual(self.lookup(chunks=[{'web': {'uri': self.REDIRECT, 'title': 'Sam Smith'}}]), self.URL)
         self.assertEqual(self.lookup({'company': 'Other'}), '')
         self.assertEqual(self.lookup({'url': 'https://example.com/in/sam-smith'}), '')
 
     def test_errors_stay_blank(self):
         self.assertEqual(self.lookup(status=500), '')
         self.assertEqual(self.lookup(status=429), '')
+
+    def test_context_can_identify_linkedin_without_company(self):
+        person = {'name': 'Sam Smith', 'role': 'Robotics engineer', 'working_on': 'Underwater inspection drones',
+                  'transcript': 'PRIVATE RAW WORDS', 'email': 'private@example.com'}
+        matched = {'role': person['role'], 'working_on': person['working_on']}
+        def reply(request):
+            prompt = json.loads(request.content)['contents'][0]['parts'][0]['text']
+            self.assertIn('Underwater inspection drones', prompt)
+            self.assertNotIn('PRIVATE RAW WORDS', prompt)
+            self.assertNotIn('private@example.com', prompt)
+            return httpx.Response(200, json={'candidates': [{
+                'content': {'parts': [{'text': json.dumps({'url': self.URL, 'name': 'Sam Smith',
+                    'confidence': 'high', 'matched_context': matched})}]},
+                'groundingMetadata': {'groundingChunks': [{'web': {'uri': self.URL}}]}}]})
+        with httpx.Client(transport=httpx.MockTransport(reply)) as client:
+            self.assertEqual(lookup_social(person, gemini_key='test', client=client), self.URL)
+            matched.pop('working_on')
+            self.assertEqual(lookup_social(person, gemini_key='test', client=client), '')
 
     def test_gemini_key_in_environment_selects_gemini(self):
         with patch.dict(os.environ, {'GEMINI_API_KEY': 'env-key', 'OPENAI_API_KEY': 'openai'}):

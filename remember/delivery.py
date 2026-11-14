@@ -65,7 +65,7 @@ class DeliveryService:
                    ntfy_url=os.getenv('NTFY_URL', '').strip(),
                    ntfy_token=os.getenv('NTFY_TOKEN', '').strip())
 
-    def deliver(self, person, vcard_text, fallback_url=None):
+    def deliver(self, person, vcard_text, fallback_url=None, progress=None):
         """Return per-channel status; never propagate provider responses or secrets.
 
         Runs synchronously and serializes sends. Use a worker thread when calling
@@ -75,13 +75,15 @@ class DeliveryService:
         if not self.enabled:
             return {'icloud': _result('disabled'), 'notification': _result('disabled')}
         with self._lock:
-            return asyncio.run(self._deliver(person, vcard_text, fallback_url))
+            return asyncio.run(self._deliver(person, vcard_text, fallback_url, progress))
 
-    async def _deliver(self, person, vcard_text, fallback_url):
+    async def _deliver(self, person, vcard_text, fallback_url, progress=None):
         result = {'icloud': _result('not_configured'), 'notification': _result('not_configured')}
         async with httpx.AsyncClient(transport=self.transport, timeout=2.0, follow_redirects=False,
                                      trust_env=False) as client:
             if self.username and self.password:
+                if progress:
+                    progress("icloud", _result("active"))
                 try:
                     async with asyncio.timeout(self.ICLOUD_BUDGET):
                         await self._save(client, person, vcard_text)
@@ -90,13 +92,19 @@ class DeliveryService:
                     result['icloud'] = _result('error', self._safe_error(error))
             elif self.username or self.password:
                 result['icloud'] = _result('error', 'Both iCloud username and app-specific password are required.')
+            if progress:
+                progress("icloud", result["icloud"])
             if self.ntfy_url:
+                if progress:
+                    progress("ntfy", _result("active"))
                 try:
                     async with asyncio.timeout(self.NOTIFICATION_BUDGET):
                         await self._notify(client, result['icloud']['status'] == 'saved', fallback_url)
                     result['notification'] = _result('sent')
                 except Exception as error:
                     result['notification'] = _result('error', self._safe_error(error))
+            if progress:
+                progress("ntfy", result["notification"])
         return result
 
     @staticmethod

@@ -22,6 +22,16 @@ class DeliveryTests(unittest.TestCase):
         return DeliveryService(enabled=True, username='test@example.com', password='SECRET',
             transport=httpx.MockTransport(handler), **kwargs)
 
+    def test_live_progress_preserves_icloud_failure_and_notification_success(self):
+        events = []
+        def handler(request):
+            events.append(('request', request.method))
+            return httpx.Response(401 if request.method == 'PUT' else 200)
+        service = self.service(handler, addressbook_url=BOOK, ntfy_url='https://ntfy.sh/test')
+        service.deliver(PERSON, VCARD, progress=lambda stage, result: events.append((stage, result['status'])))
+        self.assertEqual(events, [('icloud', 'active'), ('request', 'PUT'), ('icloud', 'error'),
+                                  ('ntfy', 'active'), ('request', 'POST'), ('ntfy', 'sent')])
+
     def test_disabled_and_construction_are_offline(self):
         with patch.dict(os.environ, {'REMEMBER_AUTO_DELIVER': '0', 'ICLOUD_USERNAME': 'secret'}, clear=True):
             service = DeliveryService.from_env()

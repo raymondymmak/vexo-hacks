@@ -170,6 +170,7 @@ class HeuristicExtractor:
     label = "built-in"
 
     def extract(self, transcript: str, moments=None) -> dict:
+        self.used_fallback = False
         text = (transcript or "").strip()
         card = blank_card()
         other_text = "\n".join(line for line in text.splitlines() if not line.startswith("[wearer]"))
@@ -240,6 +241,7 @@ class OpenAIExtractor:
         return ai.extract(text, CARD_SCHEMA, INSTRUCTIONS)
 
     def extract(self, transcript: str, moments=None) -> dict:
+        self.used_fallback = False
         text = (transcript or "").strip()
         kept = [" ".join(str(moment).split()) for moment in (moments or []) if str(moment).strip()]
         if kept:
@@ -258,6 +260,7 @@ class OpenAIExtractor:
             else:
                 print("Problem (ai): The card could not be read. Using the built-in extractor.")
             print("Using the built-in extractor for this conversation.")
+            self.used_fallback = True
             return HeuristicExtractor().extract(transcript, moments)
         card = attach_moments(raw, moments)
         if not any(line.startswith("[wearer]") for line in (transcript or "").splitlines()):

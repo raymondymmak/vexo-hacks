@@ -58,3 +58,20 @@ class DialogueTests(unittest.TestCase):
                 self.assertEqual(reopened.state()['status']['utterances'],[])
             finally:
                 reopened.close()
+
+    def test_processing_progress_survives_save_and_resets_for_next_capture(self):
+        session = Session(':memory:', HeuristicExtractor())
+        try:
+            session.start()
+            self.assertEqual(session.state()['status']['pipeline']['capture']['status'], 'active')
+            session.hear("I'm Maya Chen.", speaker='1')
+            person = session.end()
+            stages = session.state()['status']['pipeline']
+            self.assertEqual([stages[key]['status'] for key in ('capture', 'transcription', 'extraction', 'save')], ['done'] * 4)
+            self.assertEqual(stages['save']['person_id'], person['id'])
+            session.start()
+            self.assertEqual(list(session.state()['status']['pipeline']), ['capture'])
+            session.discard()
+            self.assertEqual(session.state()['status']['pipeline'], {})
+        finally:
+            session.close()

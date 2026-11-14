@@ -23,6 +23,7 @@ class Session:
         self.on_reset = None
         self.on_capture = None
         self.processing = False
+        self.pipeline = {}
         self.last_audio = 0
         self.partial_speaker = None
         self.error = None
@@ -33,6 +34,12 @@ class Session:
         self.sim = False
         self.mic_on = False
         self.note = "Type a line, or play the demo."
+
+    def progress(self, stage, state, detail, **metadata):
+        with self.lock:
+            self.pipeline[stage] = {"status": state, "detail": detail, "updated_at": time.time(), **metadata}
+            status = self._status()
+        self._publish({"type": "status", "status": status})
 
     def close(self) -> None:
         self.store.close()
@@ -88,6 +95,7 @@ class Session:
             with self.lock:
                 if self.processing or self.splitter.open is not None:
                     return self._status()
+                self.pipeline = {}
                 self.splitter.open = OpenConversation()
                 self.speaker_lines = []
                 self.wearer_speaker = None
@@ -104,6 +112,7 @@ class Session:
                     status = self._status()
                 self._publish({"type": "status", "status": status})
                 raise
+            self.progress("capture", "active", "Listening for speech; speaker-labelled dialogue appears below.")
             status = self.state()["status"]
             self._publish({"type": "status", "status": status})
             return status
@@ -140,6 +149,9 @@ class Session:
                     status = self._status()
                 self._publish({"type": "status", "status": status})
                 raise
+            if self.splitter.open is not None:
+                self.progress("capture", "done", "Microphone stopped.")
+                self.progress("transcription", "active", "Waiting for the final words from transcription.")
             if was_listening:
                 # Let queued audio/STT finals arrive after the physical microphone stops.
                 # This bounded grace period also preserves the last interim if the
@@ -165,6 +177,7 @@ class Session:
             self._publish({"type": "status", "status": status})
             if closed is None:
                 return None
+            self.progress("transcription", "done", "Final dialogue assembled.")
             if lines:
                 closed.transcript = "\n".join(
                     "[%s] %s" % ("wearer" if wearer is not None and who == wearer
@@ -190,6 +203,8 @@ class Session:
                 closed.moments.clear()
                 return person
             except Exception:
+                failed = "save" if self.pipeline.get("save", {}).get("status") == "active" else "extraction"
+                self.progress(failed, "error", "Could not finish. Transcript retained; use End to retry.")
                 # Keep the original capture available for review or an explicit retry.
                 with self.lock:
                     self.splitter.open = current
@@ -213,6 +228,7 @@ class Session:
                     current.lines.clear()
                     current.partial = ""
                     current.moments.clear()
+                self.pipeline = {}
                 self.splitter = Splitter()
                 self.speaker_lines = []
                 self.wearer_speaker = None
@@ -237,6 +253,7 @@ class Session:
                 self.partial_speaker = None
                 self.error = None
                 self.store.reset()
+                self.pipeline = {}
                 self.splitter = Splitter()
                 status = self._status()
             self._clear_transient_events()
@@ -250,10 +267,13 @@ class Session:
         return {"people": people, "status": status}
 
     def _finish(self, closed, person_id=None):
+        self.progress("extraction", "active", "Extracting contact details, notes, and promises.")
         card = self.extractor.extract(closed.transcript, closed.moments)
+        self.progress("extraction", "done", "AI unavailable; used the built-in extractor. Review contact details." if getattr(self.extractor, "used_fallback", False) else "Contact details extracted.")
         card = attach_moments(card, closed.moments)
         # Keep transcript history locally; contact summaries and exports omit it.
         card["key_moments"] = []
+        self.progress("save", "active", "Saving the contact and conversation locally.")
         person = self.store.merge(
             card,
             transcript=closed.transcript if self.retain_transcripts else "",
@@ -263,6 +283,7 @@ class Session:
             ended_at=closed.ended_at,
             person_id=person_id,
         )
+        self.progress("save", "done", "Saved on this computer.", person_id=person["id"])
         with self.lock:
             status = self._status()
         self._clear_transient_events()
@@ -292,6 +313,7 @@ class Session:
             if current.partial.strip():
                 utterances.append({"speaker": self.partial_speaker, "text": current.partial.strip(), "final": False})
         return {
+            "pipeline": {key: dict(value) for key, value in self.pipeline.items()},
             "band": self.band_label,
             "sim": self.sim,
             "mic_on": self.mic_on,

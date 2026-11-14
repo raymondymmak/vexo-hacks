@@ -47,7 +47,8 @@ class ContactFlow:
             if self._closed:
                 return
             generation = self._generation
-        delivery = {'icloud': {'status': 'disabled' if self.offline else 'pending'},
+        delivery = {'social': {'status': 'disabled' if self.offline else 'pending'},
+                    'icloud': {'status': 'disabled' if self.offline else 'pending'},
                     'ntfy': {'status': 'disabled' if self.offline else 'pending'}}
         if not self._publish(person, delivery, generation):
             return
@@ -94,7 +95,10 @@ class ContactFlow:
         started = person.get('_finished_at', time.monotonic())
         if not self._current(person, generation):
             return
-        delivery = {}
+        delivery = {'social': {'status': 'pending'}, 'icloud': {'status': 'pending'}, 'ntfy': {'status': 'pending'}}
+        def progress(stage, result):
+            delivery[stage] = result
+            self._publish(person, dict(delivery), generation)
         social = ''
         try:
             current = self._current(person, generation)
@@ -102,12 +106,17 @@ class ContactFlow:
                 return
             unnamed = (current.get('name') or '').strip().casefold() in ('', 'someone you met', 'unknown', 'someone')
             if unnamed and not current.get('email') and not current.get('phone'):
-                delivery = {'icloud': {'status': 'skipped', 'error': 'Add a name, email, or phone before delivery.'},
+                delivery = {'social': {'status': 'skipped', 'detail': 'Contact identity is missing.'}, 'icloud': {'status': 'skipped', 'error': 'Add a name, email, or phone before delivery.'},
                             'ntfy': {'status': 'skipped'}}
                 self._publish(person, delivery, generation)
                 return
-            if os.environ.get('REMEMBER_AUTO_DELIVER') == '1' and os.environ.get('REMEMBER_SOCIAL_LOOKUP', '1') == '1':
-                social = self.lookup(current)
+            if os.environ.get('REMEMBER_SOCIAL_LOOKUP', '1') == '1':
+                progress("social", {"status": "active"})
+                lookup_errors = []
+                social = self.lookup(current, on_error=lookup_errors.append) if self.lookup is lookup_social else self.lookup(current)
+                progress("social", {"status": "error", "error": lookup_errors[0]} if lookup_errors else {"status": "done" if social else "skipped", "detail": "LinkedIn match found in search sources." if social else "No confident LinkedIn match returned."})
+            else:
+                progress("social", {"status": "disabled"})
             # Re-read after enrichment so a user edit wins over the original
             # extraction snapshot, and a reset prevents the provider send.
             current = self._current(person, generation)
@@ -117,8 +126,9 @@ class ContactFlow:
                 current = dict(current, social_url=social)
             base = os.environ.get('REMEMBER_PUBLIC_URL', '').rstrip('/')
             fallback = (base + '/contact/%d.vcf?key=%s' % (current['id'], contact_key(self.secret, current))) if base.startswith("https://") and self.secret else None
-            result = self.service.deliver(current, render_contact(current), fallback_url=fallback)
-            delivery = {'icloud': result.get('icloud', {}), 'ntfy': result.get('notification', result.get('ntfy', {}))}
+            kwargs = {"progress": progress} if isinstance(self.service, DeliveryService) else {}
+            result = self.service.deliver(current, render_contact(current), fallback_url=fallback, **kwargs)
+            delivery.update({'icloud': result.get('icloud', {}), 'ntfy': result.get('notification', result.get('ntfy', {}))})
         except Exception:
             delivery = {'icloud': {'status': 'error', 'error': 'Contact delivery failed; download the contact as a fallback.'},
                         'ntfy': {'status': 'error', 'error': 'Notification was not confirmed.'}}
