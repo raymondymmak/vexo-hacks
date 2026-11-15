@@ -7,6 +7,7 @@ the same slot and turns PCM into transcript frames without leaving the machine.
 
 import asyncio
 import os
+import re
 import threading
 from dataclasses import dataclass
 
@@ -179,10 +180,33 @@ def deepgram_key() -> str:
     return os.environ.get("DEEPGRAM_API_KEY", "").strip()
 
 
+def speech_error_detail(frame):
+    detail = str(getattr(frame, 'error', '') or 'Speech service connection failed.')
+    for name, value in os.environ.items():
+        if value and len(value) >= 8 and any(word in name for word in ('KEY', 'TOKEN', 'PASSWORD', 'SECRET')):
+            detail = detail.replace(value, '[redacted]')
+    detail = re.sub(r'(?i)(token|key|authorization|signature)([=: ]+)[^\s,;]+', r'\1\2[redacted]', detail)
+    return detail[:500]
+
+
+class RecoveringDeepgramSTTService(DeepgramSTTService):
+    """Check speech readiness independently of the band's Bluetooth connection."""
+    async def ensure_connected(self):
+        if not hasattr(self, '_ready_lock'):
+            self._ready_lock = asyncio.Lock()
+        async with self._ready_lock:
+            if self._connection is not None and self.is_usable:
+                return
+            await asyncio.wait_for(self._do_reconnect(), timeout=8)
+            if self._connection is None:
+                raise ConnectionError('Speech recognition could not reconnect.')
+            await self.set_usable(True)
+
+
 def build_stt(api_key: str = "", lines=None, events=None, bytes_per_line: int = 16000):
     """DeepgramSTTService when a key is present, otherwise the in-pipeline mock."""
     if api_key:
-        return DeepgramSTTService(
+        return RecoveringDeepgramSTTService(
             api_key=api_key,
             encoding="linear16",
             channels=CHANNELS,
@@ -284,6 +308,7 @@ class VoicePipeline:
         self._lock = threading.Lock()
         self._started = False
         self._early_taps = []
+        self._recovery_task = None
 
         @self.worker.event_handler("on_pipeline_started")
         async def _on_started(_worker, _frame):
@@ -297,9 +322,33 @@ class VoicePipeline:
 
         @self.worker.event_handler("on_pipeline_error")
         async def _on_error(_worker, _frame):
-            print("Problem (speech): the transcription pipeline reported an error. "
-                  "You can still type a line on the page.")
-            session.progress("transcription", "error", "Speech recognition reported a connection error. Reconnect the band if words do not resume.")
+            detail = speech_error_detail(_frame)
+            print("Problem (speech): " + detail)
+            session.speech_failed(detail)
+            if (self.live and not self.stt.is_usable and
+                    (self._recovery_task is None or self._recovery_task.done())):
+                self._recovery_task = asyncio.create_task(self._recover_speech())
+
+    async def _recover_speech(self):
+        # The SDK retries transient failures itself. Recover once after it gives
+        # up, instead of leaving a connected band feeding an unusable service.
+        await asyncio.sleep(2)
+        try:
+            await self.stt.ensure_connected()
+            self.session.speech_recovered()
+        except Exception as error:
+            self.session.speech_failed('Speech recognition could not reconnect. End and start the conversation to retry.')
+
+    def ensure_ready(self):
+        if not self.live:
+            return
+        future = asyncio.run_coroutine_threadsafe(self.stt.ensure_connected(), self.loop)
+        try:
+            future.result(timeout=10)
+        except Exception:
+            future.cancel()
+            raise RuntimeError('Speech recognition is unavailable; the microphone was not started.')
+        self.session.speech_recovered()
 
     def start(self, timeout: float = 15) -> None:
         self._thread = threading.Thread(target=self._thread_main, name="remember-voice", daemon=True)
@@ -334,6 +383,8 @@ class VoicePipeline:
     def stop(self) -> None:
         loop = self.loop
         if loop is not None and loop.is_running():
+            if self._recovery_task is not None:
+                loop.call_soon_threadsafe(self._recovery_task.cancel)
             try:
                 asyncio.run_coroutine_threadsafe(self.worker.queue_frame(EndFrame()), loop).result(timeout=5)
             except Exception:

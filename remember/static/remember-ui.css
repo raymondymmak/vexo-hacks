@@ -765,3 +765,15 @@ body[data-view="room"] .band-bar, body[data-view="room"] .progress-panel, body[d
 .room-arc-new { animation:room-connect-in 1.2s ease-out; }
 @keyframes room-connect-in { from { opacity:0; stroke-width:6; } to { opacity:1; stroke-width:2.3; } }
 @media(prefers-reduced-motion:reduce) { .room-arc-new { animation:none; } }
+
+/* The saved person is the result; delivery progress remains underneath. */
+.result-card { align-items:flex-start; padding:28px; background:white!important; border-color:var(--sep-2)!important; box-shadow:0 4px 20px #00000005; gap:22px; }
+.result-card .result-avatar { width:88px; height:88px; flex:0 0 88px; font-size:30px; border-radius:22px; }
+.result-identity { flex:1; min-width:0; }
+.result-card .result-kicker { margin:0 0 8px; color:#247c39; font-size:11px; font-weight:650; letter-spacing:.08em; text-transform:uppercase; }
+.result-card.attention .result-kicker { color:#9a5a17; }
+.result-card h2 { font-size:32px; line-height:1.12; letter-spacing:-.035em; margin:0 0 8px; overflow-wrap:anywhere; }
+.result-card .result-role { font-size:16px; margin:0 0 12px; }
+.result-card .result-note { font-size:15px; max-width:760px; line-height:1.55; margin:0; }
+.result-links { margin-top:12px; font-size:13px; }
+@media(max-width:760px) { .result-card { padding:20px; gap:14px; flex-wrap:wrap; } .result-card .result-avatar { width:60px; height:60px; flex-basis:60px; border-radius:16px; font-size:23px; } .result-card h2 { font-size:25px; } .result-card .result-role { font-size:14px; } .result-card #completion-icon { display:none; } }

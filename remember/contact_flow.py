@@ -117,8 +117,12 @@ class ContactFlow:
                 lookup_errors = []
                 rejections = []
                 remembered = confirmed_profile(current, self.session.store.list_people()) if self.lookup is lookup_social else ''
-                social = remembered or (self.lookup(current, on_error=lookup_errors.append, on_rejection=rejections.append) if self.lookup is lookup_social else self.lookup(current))
-                progress("social", {"status": "error", "error": lookup_errors[0]} if lookup_errors else {"status": "done" if social else "skipped", "detail": ("Matched a previously confirmed contact using two shared identity clues." if remembered else "LinkedIn match found in search sources.") if social else (rejections[-1] if rejections else "No confident LinkedIn match returned.")})
+                provider = ['saved' if remembered else '']
+                def provider_started(name):
+                    provider[0] = name
+                    progress('social', {'status': 'active', 'provider': name})
+                social = remembered or (self.lookup(current, on_error=lookup_errors.append, on_rejection=rejections.append, on_provider=provider_started) if self.lookup is lookup_social else self.lookup(current))
+                progress("social", {"provider": provider[0], "status": "error", "error": lookup_errors[0]} if lookup_errors else {"provider": provider[0], "status": "done" if social else "skipped", "detail": ("Matched a previously confirmed contact using two shared identity clues." if remembered else "LinkedIn match found in search sources.") if social else (rejections[-1] if rejections else "No confident LinkedIn match returned.")})
             else:
                 progress("social", {"status": "disabled"})
             # Re-read after enrichment so a user edit wins over the original

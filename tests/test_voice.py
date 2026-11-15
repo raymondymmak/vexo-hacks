@@ -102,12 +102,12 @@ class DeepgramBuilderTests(unittest.TestCase):
             def __init__(self, **kwargs):
                 captured.update(kwargs)
 
-        original = voice.DeepgramSTTService
-        voice.DeepgramSTTService = Capture
+        original = voice.RecoveringDeepgramSTTService
+        voice.RecoveringDeepgramSTTService = Capture
         try:
             stt = voice.build_stt(api_key="x")
         finally:
-            voice.DeepgramSTTService = original
+            voice.RecoveringDeepgramSTTService = original
         self.assertIsInstance(stt, Capture)
         self.assertEqual(captured["encoding"], "linear16")
         self.assertEqual(captured["sample_rate"], 16000)

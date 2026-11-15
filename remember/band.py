@@ -202,6 +202,8 @@ class BandSession:
         from vexo_open.audio import PcmDecoder
         from vexo_open.sync import VexoError
 
+        if self.pipeline is not None and hasattr(self.pipeline, 'ensure_ready'):
+            self.pipeline.ensure_ready()
         print("Loading the sound decoder (a few seconds, the first time)...")
         # The band restarts its packet sequence at zero on every audio start.
         # Reusing a decoder makes its late-packet guard drop the new stream.

@@ -371,7 +371,7 @@ def _structured_search_result(raw, context, client, key, evidence=None):
     return result
 
 
-def lookup_social(person, *, api_key=None, client=None, gemini_key=None, on_error=None, on_rejection=None, _retry=False, _discovered_name=''):
+def lookup_social(person, *, api_key=None, client=None, gemini_key=None, on_error=None, on_rejection=None, on_provider=None, _retry=False, _discovered_name=''):
     context = _lookup_context(person)
     name, company = context.get('name', ''), context.get('company', '')
     if gemini_key is None and api_key is None:
@@ -380,6 +380,8 @@ def lookup_social(person, *, api_key=None, client=None, gemini_key=None, on_erro
     if not name or name.casefold() in ('someone you met', 'unknown', 'someone') or not (company or sum(bool(context.get(f)) for f in ('role', 'working_on', 'summary')) >= 1) or not (key or gemini_key):
         return ''
     if gemini_key:
+        if on_provider:
+            on_provider('gemini')
         errors = []
         url = _lookup_gemini(context, gemini_key, client, errors.append, on_rejection)
         if url:
@@ -388,13 +390,15 @@ def lookup_social(person, *, api_key=None, client=None, gemini_key=None, on_erro
         # Explicit api_key prevents recursive selection of Gemini.
         if key:
             fallback_errors = []
-            url = lookup_social(person, api_key=key, client=client, on_error=fallback_errors.append, on_rejection=on_rejection)
+            url = lookup_social(person, api_key=key, client=client, on_error=fallback_errors.append, on_rejection=on_rejection, on_provider=on_provider)
             if url:
                 return url
             errors = fallback_errors or errors
         if on_error and errors:
             on_error(errors[-1])
         return ''
+    if on_provider:
+        on_provider('openai')
     owned = client is None
     client = client or httpx.Client(timeout=httpx.Timeout(30, connect=5), follow_redirects=False, trust_env=False)
     try:
@@ -438,7 +442,7 @@ def lookup_social(person, *, api_key=None, client=None, gemini_key=None, on_erro
             on_rejection(_rejection(result, context, grounded))
         if owned and not _retry:
             return lookup_social(person, api_key=key, on_error=on_error,
-                                 on_rejection=on_rejection, _retry=True,
+                                 on_rejection=on_rejection, on_provider=on_provider, _retry=True,
                                  _discovered_name=result.get('name', '') if (sources and
                                      _name_matches(name, result.get('name', '')) and
                                      not result.get('ambiguous') and not result.get('conflicts') and

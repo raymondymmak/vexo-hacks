@@ -30,6 +30,7 @@ class Session:
         self.last_audio = 0
         self.partial_speaker = None
         self.error = None
+        self.speech_error = None
         self.wearer_speaker = None
         self.speaker_lines = []
         self.operation_lock = threading.RLock()
@@ -43,6 +44,18 @@ class Session:
             self.pipeline[stage] = {"status": state, "detail": detail, "updated_at": time.time(), **metadata}
             status = self._status()
         self._publish({"type": "status", "status": status})
+
+    def speech_failed(self, detail):
+        with self.lock:
+            self.speech_error = detail
+        self.progress('transcription', 'error', detail)
+
+    def speech_recovered(self):
+        with self.lock:
+            had_error = self.speech_error is not None
+            self.speech_error = None
+        if had_error:
+            self.progress('transcription', 'active', 'Speech recognition reconnected; listening for words.')
 
     def close(self) -> None:
         self.store.close()
@@ -72,6 +85,9 @@ class Session:
             if self.processing or (audio and self.splitter.open is None):
                 return self._status()
             if audio:
+                self.speech_error = None
+                if self.pipeline.get('transcription', {}).get('status') == 'error':
+                    self.pipeline['transcription'] = {'status': 'active', 'detail': 'Speech recognition recovered.', 'updated_at': time.time()}
                 self.audio_health["last_transcript_at"] = time.time()
                 self.last_audio = time.monotonic()
             self.splitter.hear(text, final)
@@ -332,6 +348,7 @@ class Session:
             if current.partial.strip():
                 utterances.append({"speaker": self.partial_speaker, "text": current.partial.strip(), "final": False})
         return {
+            "speech_error": self.speech_error,
             "audio_health": dict(self.audio_health),
             "room": dict(self.room),
             "pipeline": {key: dict(value) for key, value in self.pipeline.items()},
