@@ -14,3 +14,6 @@ remember.db
 *.sqlite-wal
 
 .afterhello-dot-connection.json
+
+# Personal contact portraits stay on this computer.
+remember/static/contact-photos/

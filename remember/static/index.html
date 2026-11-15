@@ -151,6 +151,7 @@
       return ["#687ba1", "#7a68a4", "#b57958", "#4c8a86", "#6b8660"][hash % 5];
     }
     function profilePhotoUrl(value) {
+      if (typeof value === "string" && /^\/static\/contact-photos\/[a-z0-9-]+\.(jpeg|jpg|png|webp)$/.test(value)) return value;
       try {
         const url = new URL(value);
         return url.protocol === "https:" && url.hostname.endsWith(".licdn.com") && !url.username && !url.password && (!url.port || url.port === "443") ? url.href : "";
