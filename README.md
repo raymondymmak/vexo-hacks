@@ -133,3 +133,20 @@ This calls the configured providers and reports the actual URL, elapsed time, an
 The room recommends registered people who share a specific professional field after an encounter identifies a unique participant. It uses saved role/project/summary facts (for example, firmware and physical AI both map to hardware and embedded systems), keeps recommendations separate from meetings, and delivers the reason privately to both people. Generic “tech” interests and ambiguous names do not trigger these matches.
 
 Import selected local contacts into the room roster with `scripts/register_room_contacts.py --contact CONTACT_ID:PARTICIPANT_ID`. Supply `REMEMBER_ROOM_URL` and `REMEMBER_ROOM_ADMIN_TOKEN`; add `--wearer PARTICIPANT_ID` when updating this laptop's wearer, then restart the band backend. Registration refreshes that participant's access token. Only selected professional profile fields are shared; transcripts and contact coordinates stay local. Set `REMEMBER_ROOM_ADMIN_TOKEN` and `REMEMBER_ROOM_PROJECTOR_TOKEN` for stable room-server access across restarts. Recommendations run after **End & save**, when extraction completes.
+
+### ChatGPT Dot events through Cloudflare
+
+Run a dedicated MCP service (the band backend need not restart):
+
+```sh
+.venv/bin/python -m remember.dot_events --port 8010
+cloudflared tunnel --url http://127.0.0.1:8010 --no-autoupdate
+```
+
+Set a random `AFTERHELLO_MCP_TOKEN` of at least 32 characters in `.env` first. Connect the tunnel's `/mcp` endpoint using bearer authentication, or use `/mcp/TOKEN` as a private capability URL when the plugin setup cannot attach a bearer header. Treat that complete URL like a password. The tunnel exposes only this separate service, not the dashboard. Quick Tunnel addresses change when the tunnel restarts; use a named Cloudflare tunnel for a stable installation.
+
+The server supports MCP Streamable HTTP JSON responses, `initialize`, `tools/list`, `tools/call`, and `events/list`, `events/subscribe`, `events/unsubscribe`. It advertises `conversation.completed` and a read-only `afterhello_status` tool. In the Dot, connect the plugin and calendar, then ask: “Monitor AfterHello's completed conversations. Identify meeting plans, check my calendar, and propose a time. Ask me before creating events or sending invitations.” The endpoint has no calendar-write capability; the Dot's connected calendar and user instructions govern scheduling.
+
+ChatGPT supplies the callback URL and signing secret during subscription. The service verifies a signed challenge, pins public callback IPs with TLS hostname verification, rejects redirects/private destinations, and signs event deliveries using Standard Webhooks. It persists subscriptions and bounded retry jobs in the ignored `afterhello-events.sqlite`. MCP token rotation disables old subscriptions. No history is sent on first installation. Newly saved conversation summaries and conversation-scoped wearer promises are eligible; raw dialogue, email addresses, phone numbers and app credentials are excluded. A `2xx` callback means received, not that an event was booked. Check the read-only status tool for active subscriptions and delivery counts.
+
+Tests: `.venv/bin/python -m unittest tests.test_dot_events -q`. A real Dot subscription and calendar action still require connecting the plugin in ChatGPT.

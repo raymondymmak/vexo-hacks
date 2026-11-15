@@ -12,3 +12,5 @@ remember.db
 
 *.sqlite-shm
 *.sqlite-wal
+
+.afterhello-dot-connection.json
