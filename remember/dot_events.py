@@ -1,6 +1,6 @@
 """Dedicated, authenticated MCP Events sidecar for ChatGPT Dots.
 
-Only summaries of conversations completed after startup are eligible. Does not
+New completed conversations and wearer-scoped room introductions are eligible. Does not
 expose the dashboard, raw transcripts, credentials, or calendar write tools.
 """
 import argparse
@@ -33,6 +33,19 @@ SCHEMA = {'type': 'object', 'properties': {
     'timezone': {'type': 'string'}, 'promises': {'type': 'array', 'items': {'type':'object'}}},
     'required': ['conversation_id','contact_name','summary','ended_at','timezone','promises'],
     'additionalProperties': False}
+
+ROOM_EVENT = 'room.connection.created'
+ROOM_SCHEMA = {'type':'object','properties':{
+    'connection_id':{'type':'string'}, 'booking_key':{'type':'string'},
+    'participants':{'type':'array','items':{'type':'object','properties':{
+        'id':{'type':'string'},'name':{'type':'string'},'simulated':{'type':'boolean'}},
+        'required':['id','name','simulated'],'additionalProperties':False}},
+    'connection_types':{'type':'array','items':{'type':'string','enum':['intro','match']}},
+    'reasons':{'type':'array','items':{'type':'string'}},
+    'created_at':{'type':'string'},'timezone':{'type':'string'}},
+    'required':['connection_id','booking_key','participants','connection_types','reasons','created_at','timezone'],
+    'additionalProperties':False}
+
 
 
 def utc(value=None):
@@ -94,20 +107,25 @@ def send_callback(url, body, headers):
 
 
 class Events:
-    def __init__(self, source, db, token, sender=send_callback):
+    def __init__(self, source, db, token, sender=send_callback, *, room_source=None, participant_id=None):
         if len(token)<32:
             raise ValueError('Use a random MCP token of at least 32 characters')
         self.source,self.token,self.sender = str(source),token,sender
+        self.room_source = str(room_source) if room_source else None
+        self.participant_id = participant_id
         self.lock=threading.RLock()
         self.db=sqlite3.connect(db,check_same_thread=False)
         self.db.row_factory=sqlite3.Row
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY,value TEXT);
         CREATE TABLE IF NOT EXISTS seen (id TEXT PRIMARY KEY);
+        CREATE TABLE IF NOT EXISTS bookings(booking_key TEXT PRIMARY KEY,status TEXT,event_id TEXT,meet_url TEXT);
         CREATE TABLE IF NOT EXISTS subscriptions(id TEXT PRIMARY KEY,url TEXT,secret TEXT,expires REAL,active INTEGER);
         CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,payload TEXT);
         CREATE TABLE IF NOT EXISTS deliveries(event_id TEXT,subscription_id TEXT,attempts INTEGER DEFAULT 0,due REAL,status TEXT DEFAULT 'pending',PRIMARY KEY(event_id,subscription_id));
         ''')
+        if 'event_name' not in {r[1] for r in self.db.execute('PRAGMA table_info(subscriptions)')}:
+            self.db.execute("ALTER TABLE subscriptions ADD COLUMN event_name TEXT NOT NULL DEFAULT 'conversation.completed'")
         if str(db)!=':memory:':os.chmod(db,0o600)
         fingerprint=hashlib.sha256(token.encode()).hexdigest()
         old=self.db.execute("SELECT value FROM metadata WHERE key='owner'").fetchone()
@@ -124,6 +142,67 @@ class Events:
                 self.db.execute("INSERT OR IGNORE INTO seen VALUES('initialized')")
                 self.db.commit()
 
+        # Enabling room events never retroactively schedules existing edges.
+        if self.room_source:
+            marker='room_initialized:'+str(Path(self.room_source).resolve())+':'+str(self.participant_id)
+            if not self.db.execute('SELECT 1 FROM metadata WHERE key=?',(marker,)).fetchone():
+                for payload in self.room_payloads():
+                    self.db.execute('INSERT OR IGNORE INTO seen VALUES(?)',(payload['eventId'],))
+                self.db.execute('INSERT INTO metadata VALUES(?,?)',(marker,'1'))
+                self.db.commit()
+
+    def room_payloads(self):
+        if not self.room_source or not self.participant_id:
+            return []
+        with sqlite3.connect(Path(self.room_source).resolve().as_uri()+'?mode=ro',uri=True) as conn:
+            conn.row_factory=sqlite3.Row
+            people={r['id']:json.loads(r['data']) for r in conn.execute('SELECT id,data FROM participants')}
+            pairs={}
+            for edge in conn.execute("SELECT * FROM edges WHERE kind IN ('intro','match') AND (source_id=? OR target_id=?) ORDER BY id",(self.participant_id,self.participant_id)):
+                ids=tuple(sorted([edge['source_id'],edge['target_id']]))
+                if any(i not in people or people[i].get('simulated',False) for i in ids):
+                    continue
+                pair=pairs.setdefault(ids,{'kinds':set(),'reasons':set(),'time':edge['created_at']})
+                pair['kinds'].add(edge['kind'])
+                for alert in conn.execute('SELECT payload FROM alerts WHERE edge_id=? AND participant_id=?',(edge['id'],self.participant_id)):
+                    reason=json.loads(alert[0]).get('reason','')
+                    if reason:pair['reasons'].add(str(reason)[:1000])
+            result=[]
+            for ids,pair in pairs.items():
+                key=hashlib.sha256(json.dumps([str(Path(self.room_source).resolve()),ids]).encode()).hexdigest()
+                event_id='room_'+key
+                result.append({'eventId':event_id,'name':ROOM_EVENT,'timestamp':utc(pair['time']),
+                    'data':{'connection_id':key,'booking_key':'afterhello-room-'+key,
+                            'participants':[{'id':i,'name':people[i]['name'],'simulated':False} for i in ids],
+                            'connection_types':sorted(pair['kinds']),'reasons':sorted(pair['reasons']),
+                            'created_at':utc(pair['time']),'timezone':os.getenv('AFTERHELLO_TIMEZONE','America/Los_Angeles')},'cursor':None})
+            return result
+
+    def claim_booking(self, key):
+        if not isinstance(key,str):raise ValueError('Invalid booking key')
+        with self.lock:
+            exists=any(json.loads(r[0]).get('data',{}).get('booking_key')==key
+                       for r in self.db.execute('SELECT payload FROM events'))
+            if not exists:raise ValueError('Unknown room scheduling request')
+            inserted=self.db.execute("INSERT OR IGNORE INTO bookings VALUES(?,'claimed','','')",(key,)).rowcount
+            row=dict(self.db.execute('SELECT * FROM bookings WHERE booking_key=?',(key,)).fetchone())
+            self.db.commit()
+            return dict(row,granted=bool(inserted))
+
+    def complete_booking(self,key,event_id,meet_url):
+        if not isinstance(event_id,str) or not 1<=len(event_id)<=512:raise ValueError('Invalid calendar event ID')
+        parsed=urlsplit(meet_url)
+        if parsed.scheme!='https' or parsed.hostname!='meet.google.com' or parsed.username or parsed.password:
+            raise ValueError('Use the actual Google Meet URL')
+        with self.lock:
+            row=self.db.execute('SELECT * FROM bookings WHERE booking_key=?',(key,)).fetchone()
+            if not row:raise ValueError('Claim this booking first')
+            if row['status']=='booked' and (row['event_id']!=event_id or row['meet_url']!=meet_url):
+                raise ValueError('A different booking is already recorded')
+            self.db.execute("UPDATE bookings SET status='booked',event_id=?,meet_url=? WHERE booking_key=?",(event_id,meet_url,key))
+            self.db.commit()
+            return {'status':'booked','event_id':event_id,'meet_url':meet_url}
+
     def source_rows(self):
         with sqlite3.connect(Path(self.source).resolve().as_uri()+'?mode=ro',uri=True) as conn:
             conn.row_factory=sqlite3.Row
@@ -135,7 +214,7 @@ class Events:
         return hashlib.sha256(('%s:%s:%s'%(row['contact_uid'],row['id'],row['ended_at'])).encode()).hexdigest()
 
     def subscribe(self, params):
-        if params.get('name')!=EVENT or params.get('arguments',{})!={}:
+        if params.get('name') not in (EVENT,ROOM_EVENT) or params.get('arguments',{})!={}:
             raise ValueError('Unknown event or unsupported filters')
         if params.get('cursor') is not None:
             raise ValueError('Replay cursors are not supported')
@@ -143,7 +222,7 @@ class Events:
         if delivery.get('mode')!='webhook':raise ValueError('Webhook delivery required')
         url,secret=delivery['url'],delivery['secret']
         signing_key(secret)
-        identifier=hashlib.sha256((hashlib.sha256(self.token.encode()).hexdigest()+EVENT+url).encode()).hexdigest()
+        identifier=hashlib.sha256((hashlib.sha256(self.token.encode()).hexdigest()+params['name']+url).encode()).hexdigest()
         ttl=params.get('ttlMs',86400000)
         if ttl is None:ttl=86400000
         if type(ttl) not in (int,float) or not 1000<=ttl<=604800000:raise ValueError('TTL must be between one second and seven days')
@@ -154,22 +233,23 @@ class Events:
             raise ValueError('Callback challenge failed')
         expires=time.time()+ttl/1000
         with self.lock:
-            self.db.execute('INSERT INTO subscriptions VALUES(?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET secret=excluded.secret,expires=excluded.expires,active=1',(identifier,url,secret,expires))
+            self.db.execute('INSERT INTO subscriptions(id,url,secret,expires,active,event_name) VALUES(?,?,?,?,1,?) ON CONFLICT(id) DO UPDATE SET secret=excluded.secret,expires=excluded.expires,active=1',(identifier,url,secret,expires,params['name']))
             self.db.commit()
         return {'id':identifier,'refreshBefore':utc(expires),'cursor':None,'truncated':False}
 
     def unsubscribe(self,params):
-        if params.get('name')!=EVENT or params.get('arguments',{})!={}:raise ValueError('Unknown subscription')
+        if params.get('name') not in (EVENT,ROOM_EVENT) or params.get('arguments',{})!={}:raise ValueError('Unknown subscription')
         with self.lock:
-            self.db.execute('UPDATE subscriptions SET active=0 WHERE url=?',(params.get('delivery',{}).get('url',''),))
+            self.db.execute('UPDATE subscriptions SET active=0 WHERE url=? AND event_name=?',(params.get('delivery',{}).get('url',''),params['name']))
             self.db.commit()
         return {}
 
     def tick(self):
         rows=self.source_rows()
+        room_payloads=self.room_payloads()
         with self.lock:
             now=time.time()
-            active=self.db.execute('SELECT id FROM subscriptions WHERE active=1 AND expires>?',(now,)).fetchall()
+            active=self.db.execute('SELECT id FROM subscriptions WHERE active=1 AND expires>? AND event_name=?',(now,EVENT)).fetchall()
             for row in rows:
                 key=self.identity(row)
                 if self.db.execute('SELECT 1 FROM seen WHERE id=?',(key,)).fetchone():continue
@@ -182,13 +262,22 @@ class Events:
                 body=json.dumps(payload,ensure_ascii=False)
                 self.db.execute('INSERT OR IGNORE INTO events VALUES(?,?)',(payload['eventId'],body))
                 for sub in active:self.db.execute('INSERT OR IGNORE INTO deliveries(event_id,subscription_id,due) VALUES(?,?,?)',(payload['eventId'],sub['id'],now))
+            room_subs=self.db.execute('SELECT id FROM subscriptions WHERE active=1 AND expires>? AND event_name=?',(now,ROOM_EVENT)).fetchall()
+            for payload in room_payloads:
+                key=payload['eventId']
+                if self.db.execute('SELECT 1 FROM seen WHERE id=?',(key,)).fetchone():continue
+                self.db.execute('INSERT INTO seen VALUES(?)',(key,))
+                if not room_subs:continue
+                self.db.execute('INSERT OR IGNORE INTO events VALUES(?,?)',(key,json.dumps(payload,ensure_ascii=False)))
+                for sub in room_subs:
+                    self.db.execute('INSERT OR IGNORE INTO deliveries(event_id,subscription_id,due) VALUES(?,?,?)',(key,sub['id'],now))
             self.db.commit()
             jobs=self.db.execute('''SELECT d.*,s.url,s.secret,e.payload FROM deliveries d JOIN subscriptions s ON d.subscription_id=s.id JOIN events e ON d.event_id=e.id WHERE d.status='pending' AND d.due<=? AND s.active=1 AND s.expires>? LIMIT 10''',(now,now)).fetchall()
-        current_keys={self.identity(row) for row in rows}
+        current_keys={'conversation_'+self.identity(row) for row in rows} | {p['eventId'] for p in room_payloads}
         for job in jobs:
             with self.lock:
                 valid=self.db.execute('SELECT * FROM subscriptions WHERE id=? AND active=1 AND expires>?',(job['subscription_id'],time.time())).fetchone()
-                if not valid or job['event_id'].removeprefix('conversation_') not in current_keys:
+                if not valid or job['event_id'] not in current_keys:
                     self.db.execute("UPDATE deliveries SET status='cancelled' WHERE event_id=? AND subscription_id=?",(job['event_id'],job['subscription_id']))
                     self.db.commit()
                     continue
@@ -206,6 +295,9 @@ class Events:
     def status(self):
         with self.lock:
             return {'active_subscriptions':self.db.execute('SELECT COUNT(*) FROM subscriptions WHERE active=1 AND expires>?',(time.time(),)).fetchone()[0],
+                    'subscriptions_by_event':{r[0]:r[1] for r in self.db.execute('SELECT event_name,COUNT(*) FROM subscriptions WHERE active=1 AND expires>? GROUP BY event_name',(time.time(),))},
+                    'room_source_configured':bool(self.room_source and self.participant_id),
+                    'bookings':{r[0]:r[1] for r in self.db.execute('SELECT status,COUNT(*) FROM bookings GROUP BY status')},
                     'deliveries':{r[0]:r[1] for r in self.db.execute('SELECT status,COUNT(*) FROM deliveries GROUP BY status')}}
 
 
@@ -245,15 +337,20 @@ def create_app(events, run_worker=True):
         try:
             if method=='initialize':result={'protocolVersion':'2025-03-26','capabilities':{'tools':{},'events':{}},'serverInfo':{'name':'AfterHello','version':'1.0.0'}}
             elif method=='ping':result={}
-            elif method=='tools/list':result={'tools':[{'name':'afterhello_status','description':'Check AfterHello event subscriptions and delivery counts.','inputSchema':{'type':'object','properties':{},'additionalProperties':False},'annotations':{'readOnlyHint':True}}]}
+            elif method=='tools/list':result={'tools':[{'name':'afterhello_status','description':'Check AfterHello subscriptions by event type, event delivery counts, and calendar booking states.','inputSchema':{'type':'object','properties':{},'additionalProperties':False},'annotations':{'readOnlyHint':True}},
+                {'name':'claim_room_booking','description':'Atomically claim a room booking key before creating a calendar event. Only create if granted is true. A previously claimed request needs reconciliation, not another event.','inputSchema':{'type':'object','properties':{'booking_key':{'type':'string'}},'required':['booking_key'],'additionalProperties':False},'annotations':{'readOnlyHint':False,'idempotentHint':True}},
+                {'name':'complete_room_booking','description':'Record the calendar event ID and Google Meet URL after successful booking.','inputSchema':{'type':'object','properties':{'booking_key':{'type':'string'},'event_id':{'type':'string'},'meet_url':{'type':'string'}},'required':['booking_key','event_id','meet_url'],'additionalProperties':False},'annotations':{'readOnlyHint':False,'idempotentHint':True}}]}
             elif method=='tools/call' and params.get('name')=='afterhello_status':result={'content':[{'type':'text','text':json.dumps(events.status())}]}
-            elif method=='events/list':result={'events':[{'name':EVENT,'description':'A newly saved AfterHello conversation summary and wearer promises, for follow-up planning.','delivery':['webhook'],'inputSchema':{'type':'object','properties':{},'additionalProperties':False},'payloadSchema':SCHEMA}]}
+            elif method=='tools/call' and params.get('name')=='claim_room_booking':result={'content':[{'type':'text','text':json.dumps(events.claim_booking(params.get('arguments',{}).get('booking_key')))}]}
+            elif method=='tools/call' and params.get('name')=='complete_room_booking':
+                a=params.get('arguments',{});result={'content':[{'type':'text','text':json.dumps(events.complete_booking(a.get('booking_key'),a.get('event_id'),a.get('meet_url')))}]}
+            elif method=='events/list':result={'events':[{'name':EVENT,'description':'A newly saved AfterHello conversation summary and wearer promises, for follow-up planning.','delivery':['webhook'],'inputSchema':{'type':'object','properties':{},'additionalProperties':False},'payloadSchema':SCHEMA}, {'name':ROOM_EVENT,'description':'A new introduction or shared-field recommendation involving the configured wearer and another real participant; one scheduling opportunity per pair.','delivery':['webhook'],'inputSchema':{'type':'object','properties':{},'additionalProperties':False},'payloadSchema':ROOM_SCHEMA}]}
             elif method=='events/subscribe':result=await asyncio.to_thread(events.subscribe,params)
             elif method=='events/unsubscribe':result=events.unsubscribe(params)
             else:return JSONResponse({'jsonrpc':'2.0','id':ident,'error':{'code':-32601,'message':'Method not found'}})
             return JSONResponse({'jsonrpc':'2.0','id':ident,'result':result})
         except Exception:
-            return JSONResponse({'jsonrpc':'2.0','id':ident,'error':{'code':-32015 if method=='events/subscribe' else -32602,'message':'Callback verification or subscription parameters invalid.','data':{'reason':'challenge_failed'}}})
+            return JSONResponse({'jsonrpc':'2.0','id':ident,'error':{'code':-32015 if method=='events/subscribe' else -32602,'message':'Callback verification or subscription parameters invalid.' if method=='events/subscribe' else 'Invalid parameters or conflicting booking state.','data':{'reason':'challenge_failed'}}})
     return app
 
 
@@ -264,8 +361,12 @@ def main():
     parser.add_argument('--source',default='remember.sqlite')
     parser.add_argument('--db',default='afterhello-events.sqlite')
     parser.add_argument('--port',type=int,default=8010)
+    parser.add_argument('--room-source',default=None)
+    parser.add_argument('--participant-id',default=None)
     args=parser.parse_args();load_dotenv('.env')
-    events=Events(args.source,args.db,os.environ.get('AFTERHELLO_MCP_TOKEN',''))
+    events=Events(args.source,args.db,os.environ.get('AFTERHELLO_MCP_TOKEN',''),
+                  room_source=args.room_source or os.getenv('AFTERHELLO_ROOM_SOURCE'),
+                  participant_id=args.participant_id or os.getenv('AFTERHELLO_ROOM_PARTICIPANT_ID'))
     uvicorn.run(create_app(events),host='127.0.0.1',port=args.port,access_log=False,log_level='warning')
 
 if __name__=='__main__':main()
