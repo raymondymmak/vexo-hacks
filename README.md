@@ -2,15 +2,19 @@
 
 Meet someone. Remember them on your phone.
 
-One Vexo Open band captures a conversation through Pipecat and Deepgram. End the conversation to create a contact with their name, company, role, contact details, notes, and attributed promises. With automatic delivery configured, AfterHello saves the contact to iCloud through CardDAV and sends an ntfy notification. A downloadable vCard is always available as a fallback.
+[![Watch the AfterHello demo video](docs/media/afterhello-pitch-poster.jpg)](docs/media/afterhello-pitch.mp4)
 
-![A conversation is captured as dialogue, processed step by step, and saved as a contact](docs/media/conversation.gif)
+**[Watch the 48-second demo](docs/media/afterhello-pitch.mp4).** You meet Timothy. AfterHello captures the conversation, writes his contact with OpenAI, finds his LinkedIn, and keeps the coffee you promised him.
 
-[Watch the one-minute walkthrough](docs/media/afterhello-demo.mp4). It was recorded from the running app in offline mode: typed lines stand in for the band, and the room shows the three simulated bands from `remember.room_demo`.
+![A conversation becomes a saved contact with a LinkedIn match and portrait](docs/media/conversation.gif)
 
 | Contacts | Full transcript | The room |
 | --- | --- | --- |
-| ![Contact cards with notes and promises, the editor opening, and search narrowing to one person](docs/media/contacts.gif) | ![Saved conversations listed like message threads](docs/media/transcript.gif) | ![The room map with three people joined by meeting, introduction and match lines](docs/media/room.gif) |
+| ![Timothy's contact card with his LinkedIn match and notes](docs/media/contacts.gif) | ![The saved conversation listed like a message thread](docs/media/transcript.gif) | ![The room map with three people joined by meeting, introduction and match lines](docs/media/room.gif) |
+
+<sub>Recorded from the running app. The dialogue was typed in place of the band. Contact extraction and the LinkedIn lookup ran live; iCloud sync and phone alerts were off. Timothy's portrait is a local file. The room shows the three simulated bands from `remember.room_demo`.</sub>
+
+One Vexo Open band captures a conversation through Pipecat and Deepgram. End the conversation to create a contact with their name, company, role, contact details, notes, and attributed promises. With automatic delivery configured, AfterHello saves the contact to iCloud through CardDAV and sends an ntfy notification. A downloadable vCard is always available as a fallback.
 
 This version is one-to-one capture with one wearer. It does not exchange contacts between bands or match people across a room.
 
