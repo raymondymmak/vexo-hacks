@@ -13,21 +13,30 @@ from remember.socials import lookup_social
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--case', choices=['raymond_mak', 'timothy_do'])
+    cases = json.loads((ROOT / 'tests/fixtures/linkedin_people.json').read_text())
+    parser.add_argument('--case', choices=[case['id'] for case in cases])
+    parser.add_argument('--judges', action='store_true', help='Run only the four judge cases')
     args = parser.parse_args()
     load_dotenv()
-    cases = json.loads((ROOT / 'tests/fixtures/linkedin_people.json').read_text())
     failed = False
     for case in cases:
         if args.case and args.case != case['id']:
             continue
+        if args.judges and case.get('group') != 'judges':
+            continue
+        if not case.get('person'):
+            failed = True
+            print(json.dumps({'case': case['id'], 'passed': False, 'status': 'blocked',
+                              'reason': case['blocked_reason']}), flush=True)
+            continue
         errors = []
+        rejections = []
         started = time.monotonic()
-        actual = lookup_social(case['person'], on_error=errors.append)
+        actual = lookup_social(case['person'], on_error=errors.append, on_rejection=rejections.append)
         passed = actual.rstrip('/') == case['expected_url'].rstrip('/')
         failed |= not passed
         print(json.dumps({'case': case['id'], 'passed': passed, 'seconds': round(time.monotonic() - started, 2),
-                          'expected': case['expected_url'], 'actual': actual, 'errors': errors}), flush=True)
+                          'expected': case['expected_url'], 'actual': actual, 'errors': errors, 'rejections': rejections}), flush=True)
     return int(failed)
 
 

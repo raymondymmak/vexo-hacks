@@ -22,5 +22,45 @@
     },
     "expected_url": "https://www.linkedin.com/in/do-timothy",
     "context_source": "https://timothydo.me/Resume_TimothyDo.pdf"
+  },
+  {
+    "id": "haris_malik",
+    "group": "judges",
+    "full_name": "Haris Malik",
+    "person": {
+      "name": "Haris",
+      "role": "Building a proximity-based AI social network",
+      "working_on": "Offline",
+      "summary": "Haris worked on humanoid robotics and AI at K-Scale Labs in California and spent a semester at EPFL in Switzerland."
+    },
+    "expected_url": "https://www.linkedin.com/in/haris-malik-",
+    "context_source": "https://www.linkedin.com/posts/haris-malik-_its-been-a-while-since-i-last-posted-the-activity-7362337997117157376-nixD"
+  },
+  {
+    "id": "vikram_narra",
+    "group": "judges",
+    "full_name": "Vikram Narra",
+    "person": {
+      "name": "Vikram",
+      "role": "Building accessibility and computer vision applications",
+      "working_on": "FindSpot indoor navigation and SafeSpot injury detection",
+      "summary": "Vikram attended the University of Toronto and built FindSpot at Hack the North using React Native and Python."
+    },
+    "expected_url": "https://www.linkedin.com/in/vikramnarra",
+    "context_source": "https://www.linkedin.com/in/vikramnarra"
+  },
+  {
+    "id": "kianif",
+    "group": "judges",
+    "person": null,
+    "expected_url": "https://www.linkedin.com/in/kianif",
+    "blocked_reason": "Public profile unreadable and no independently verified name or experience available."
+  },
+  {
+    "id": "syed_ah",
+    "group": "judges",
+    "person": null,
+    "expected_url": "https://www.linkedin.com/in/syed-ah",
+    "blocked_reason": "Public profile unreadable and no independently verified name or experience available."
   }
 ]
