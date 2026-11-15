@@ -139,6 +139,47 @@ def _need_candidates(participants, speaker_id):
     return results
 
 
+# Specific fields rather than generic labels such as "tech" or "student".
+_FIELDS = {
+    'hardware and embedded systems': r'\b(?:firmware|risc[- ]?v|fpga|embedded(?: systems)?|silicon|semiconductors?|physical ai|edge (?:ai|inference)|eecs)\b',
+    'robotics': r'\b(?:robotics?|autonomous robots?|robot control)\b',
+    'machine learning': r'\b(?:machine learning|deep learning|computer vision|neural networks?|signal processing)\b',
+    'web development': r'\b(?:web development|front[- ]?end|back[- ]?end|full[- ]?stack|react|django)\b',
+    'product design': r'\b(?:product design|ux design|user experience|interaction design)\b',
+    'biotechnology': r'\b(?:biotech(?:nology)?|genomics|bioinformatics|molecular biology)\b',
+}
+
+
+def _field_evidence(person):
+    text = '. '.join(_text(person.get(k)) for k in ('role', 'working_on', 'summary'))
+    evidence = {}
+    for sentence in re.split(r'[.!?\n]+', text):
+        if _NEGATED.search(sentence) or _INJECTION.search(sentence):
+            continue
+        for field, pattern in _FIELDS.items():
+            found = re.search(pattern, sentence, re.I)
+            if found:
+                evidence.setdefault(field, found.group())
+    return evidence
+
+
+def _field_candidates(participants, person_id):
+    person = participants[person_id]
+    fields = _field_evidence(person)
+    result = []
+    for other_id, other in participants.items():
+        if other_id == person_id:
+            continue
+        other_fields = _field_evidence(other)
+        shared = sorted(fields.keys() & other_fields.keys())
+        if shared:
+            field = shared[0]
+            result.append({'source_id': person_id, 'target_id': other_id, 'kind': 'match',
+                           'reason': '%s and %s share %s: %s mentioned %s; %s mentioned %s.' %
+                           (person['name'], other['name'], field, person['name'], fields[field], other['name'], other_fields[field])})
+    return result
+
+
 def _card_participant(participants, card):
     name = _text(card.get('name'), 150)
     other_id = _resolve_name(name, participants) if name else None
@@ -243,7 +284,15 @@ def match_room(participants, speaker_id, card, marked=False, *, use_model=None):
     candidates = _intro_candidates(participants, speaker_id, card) + _need_candidates(participants, speaker_id)
     other_id = _card_participant(participants, card)
     if other_id is not None and other_id != speaker_id:
+        # An introduction activates recommendations. A bare name can use a saved
+        # profile; fresh professional facts override that profile for this event.
+        identified = dict(participants[other_id])
+        for field in ('role', 'working_on', 'summary'):
+            if card.get(field):
+                identified[field] = card[field]
+        participants = dict(participants, **{other_id: identified})
         candidates += _need_candidates(participants, other_id)
+        candidates += _field_candidates(participants, other_id)
     unique = {}
     for candidate in candidates:
         identifiers = (candidate['source_id'], candidate['target_id'])

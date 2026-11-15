@@ -6,6 +6,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import hashlib
 import json
+import os
 from pathlib import Path
 import secrets
 import sqlite3
@@ -24,6 +25,8 @@ class ParticipantIn(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     company: str = Field(default='', max_length=200)
     role: str = Field(default='', max_length=200)
+    working_on: str = Field(default='', max_length=1000)
+    summary: str = Field(default='', max_length=3000)
     needs: list[str] = Field(default_factory=list, max_length=20)
     offers: list[str] = Field(default_factory=list, max_length=20)
     simulated: bool = False
@@ -349,7 +352,8 @@ def main():
     args = parser.parse_args()
     from .kitpath import load_dotenv
     load_dotenv()
-    app = create_room_app(args.db)
+    app = create_room_app(args.db, admin_token=os.getenv('REMEMBER_ROOM_ADMIN_TOKEN') or None,
+                          projector_token=os.getenv('REMEMBER_ROOM_PROJECTOR_TOKEN') or None)
     if args.demo:
         # Demo uses deterministic local matching even when API keys are configured.
         result = app.state.room.demo(reset=False)

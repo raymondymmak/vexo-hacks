@@ -127,3 +127,9 @@ Run the separate live discovery check explicitly:
 ```
 
 This calls the configured providers and reports the actual URL, elapsed time, and whether it matches the expected profile. It does not modify contacts or send notifications. Fixture context comes from the confirmed LinkedIn profile and Timothy's public resume, with source URLs recorded in the fixture. Live search can change over time; the checker reports failure rather than substituting the expected URL.
+
+### Shared-field recommendations
+
+The room recommends registered people who share a specific professional field after an encounter identifies a unique participant. It uses saved role/project/summary facts (for example, firmware and physical AI both map to hardware and embedded systems), keeps recommendations separate from meetings, and delivers the reason privately to both people. Generic “tech” interests and ambiguous names do not trigger these matches.
+
+Import selected local contacts into the room roster with `scripts/register_room_contacts.py --contact CONTACT_ID:PARTICIPANT_ID`. Supply `REMEMBER_ROOM_URL` and `REMEMBER_ROOM_ADMIN_TOKEN`; add `--wearer PARTICIPANT_ID` when updating this laptop's wearer, then restart the band backend. Registration refreshes that participant's access token. Only selected professional profile fields are shared; transcripts and contact coordinates stay local. Set `REMEMBER_ROOM_ADMIN_TOKEN` and `REMEMBER_ROOM_PROJECTOR_TOKEN` for stable room-server access across restarts. Recommendations run after **End & save**, when extraction completes.
