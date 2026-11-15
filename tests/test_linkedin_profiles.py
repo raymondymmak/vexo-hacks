@@ -19,9 +19,12 @@ class LinkedInProfileTests(unittest.TestCase):
             self.skipTest(case['blocked_reason'])
         person = case['person']
         url = case['expected_url']
-        result = {'url': url, 'name': found_name or case['full_name'], 'company': '',
-                  'confidence': confidence, 'matched_context': {
-                      key: person[key] for key in ('role', 'working_on', 'summary')} if matched else {}}
+        facts = ([{'kind': 'employer', 'input_quote': person['company'],
+                   'evidence': person['company'], 'source_url': url}] if person.get('company') else
+                 [{'kind': kind, 'input_quote': person[key], 'evidence': person[key], 'source_url': url}
+                  for kind, key in [('role', 'role'), ('project', 'working_on')]])
+        result = {'url': url, 'name': found_name or case['full_name'], 'company': person.get('company', ''),
+                  'confidence': confidence, 'matched_facts': facts if matched else []}
         def reply(request):
             prompt = json.loads(request.content)['contents'][0]['parts'][0]['text']
             self.assertIn(person['name'], prompt)
@@ -61,3 +64,19 @@ class LinkedInProfileTests(unittest.TestCase):
                 self.assertNotIn('linkedin.com', context)
                 self.assertNotIn(case['full_name'].lower(), context)
                 self.assertEqual(len(case['person']['name'].split()), 1)
+
+    def test_deck_roster_has_every_named_person(self):
+        expected = {'haris_malik', 'vikram_narra', 'kianif', 'asad_organizer',
+                    'ivan_leo', 'gabby_ong', 'amit_vadi', 'peter_masone', 'ethan_black',
+                    'luke_sine', 'daniel_tsentsiper', 'adam_proschek', 'sam_mcguire',
+                    'pavitra_bhalla', 'amit_patil', 'max_selivonchyk', 'ashwin_mudaliar',
+                    'abhi_aiyer', 'victor_su_ortiz', 'ming_hua', 'aarush_yadav',
+                    'arnav_kumar', 'omar_sekkat', 'louis_hart_davis', 'karan_marv'}
+        self.assertEqual({c['id'] for c in CASES if c.get('deck_source')}, expected)
+        self.assertEqual(len({c['id'] for c in CASES}), len(CASES))
+        for case in CASES:
+            if case.get('person'):
+                self.assertTrue(case.get('context_source'))
+                self.assertEqual(_canonical_profile(case['expected_url']), case['expected_url'])
+            else:
+                self.assertTrue(case.get('blocked_reason'))

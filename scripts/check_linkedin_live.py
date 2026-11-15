@@ -15,7 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     cases = json.loads((ROOT / 'tests/fixtures/linkedin_people.json').read_text())
     parser.add_argument('--case', choices=[case['id'] for case in cases])
-    parser.add_argument('--judges', action='store_true', help='Run only the four judge cases')
+    parser.add_argument('--judges', action='store_true', help='Run only the four original judge cases')
+    parser.add_argument('--deck', action='store_true', help='Run everyone named in the event deck')
     args = parser.parse_args()
     load_dotenv()
     failed = False
@@ -23,6 +24,8 @@ def main():
         if args.case and args.case != case['id']:
             continue
         if args.judges and case.get('group') != 'judges':
+            continue
+        if args.deck and not case.get('deck_source'):
             continue
         if not case.get('person'):
             failed = True
