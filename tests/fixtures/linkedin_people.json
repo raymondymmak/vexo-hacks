@@ -1,0 +1,376 @@
+[
+  {
+    "id": "raymond_mak",
+    "full_name": "Raymond Mak",
+    "person": {
+      "name": "Raymond",
+      "role": "First-year EECS major at Berkeley",
+      "working_on": "Firmware",
+      "summary": "Raymond is a first-year EECS major at Berkeley from Hong Kong. He is working on firmware."
+    },
+    "expected_url": "https://www.linkedin.com/in/raymondymmak",
+    "context_source": "https://hk.linkedin.com/in/raymondymmak"
+  },
+  {
+    "id": "timothy_do",
+    "full_name": "Timothy Do",
+    "person": {
+      "name": "Timothy",
+      "role": "Electrical and computer engineering graduate specializing in signal processing",
+      "working_on": "Embedded systems and image processing",
+      "summary": "Timothy is based in San Jose, earned an MS in Electrical and Computer Engineering at UCLA in 2024 and a BS in Electrical Engineering at UC Irvine in 2023."
+    },
+    "expected_url": "https://www.linkedin.com/in/do-timothy",
+    "context_source": "https://timothydo.me/Resume_TimothyDo.pdf"
+  },
+  {
+    "id": "haris_malik",
+    "group": "judges",
+    "full_name": "Haris Malik",
+    "person": {
+      "name": "Haris",
+      "role": "Building a proximity-based AI social network",
+      "working_on": "Offline",
+      "summary": "Haris worked on humanoid robotics and AI at K-Scale Labs in California and spent a semester at EPFL in Switzerland."
+    },
+    "expected_url": "https://www.linkedin.com/in/haris-malik-",
+    "context_source": "https://www.linkedin.com/posts/haris-malik-_its-been-a-while-since-i-last-posted-the-activity-7362337997117157376-nixD",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h6b304c68aea5a47_3_945"
+  },
+  {
+    "id": "vikram_narra",
+    "group": "judges",
+    "full_name": "Vikram Narra",
+    "person": {
+      "name": "Vikram",
+      "role": "Building accessibility and computer vision applications",
+      "working_on": "FindSpot indoor navigation and SafeSpot injury detection",
+      "summary": "Vikram attended the University of Toronto and built FindSpot at Hack the North using React Native and Python."
+    },
+    "expected_url": "https://www.linkedin.com/in/vikramnarra",
+    "context_source": "https://www.linkedin.com/in/vikramnarra",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h6b304c68aea5a47_3_945"
+  },
+  {
+    "id": "kianif",
+    "group": "judges",
+    "person": {
+      "name": "Farqaleet",
+      "company": "Tesla",
+      "role": "Senior System Software Engineer",
+      "working_on": "Industrial energy products",
+      "summary": "Farqaleet works on industrial energy software and is based in Palo Alto."
+    },
+    "expected_url": "https://www.linkedin.com/in/kianif",
+    "full_name": "Farqaleet Kiani",
+    "context_source": "https://www.linkedin.com/in/kianif",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h6b304c68aea5a47_3_945"
+  },
+  {
+    "id": "syed_ah",
+    "group": "judges",
+    "person": null,
+    "expected_url": "https://www.linkedin.com/in/syed-ah",
+    "blocked_reason": "Public profile unreadable and no independently verified name or experience available."
+  },
+  {
+    "id": "ivan_leo",
+    "group": "deck",
+    "full_name": "Ivan Leo",
+    "person": {
+      "name": "Ivan",
+      "company": "Google DeepMind",
+      "role": "Developer experience engineer",
+      "working_on": "Gemini and autonomous agents",
+      "summary": "Ivan helps developers build with Gemini and previously worked at Manus."
+    },
+    "expected_url": "https://www.linkedin.com/in/ivanleo",
+    "context_source": "https://ai.engineer/speakers/ivan-leo",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_156"
+  },
+  {
+    "id": "gabby_ong",
+    "group": "deck",
+    "full_name": "Gabby Ong",
+    "person": {
+      "name": "Gabby",
+      "company": "Google DeepMind",
+      "role": "Developer experience engineer",
+      "working_on": "Gemini demos",
+      "summary": "Gabby is based in Singapore and attended the University of Toronto."
+    },
+    "expected_url": "https://www.linkedin.com/in/gabbyong",
+    "context_source": "https://sg.linkedin.com/in/gabbyong",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_156"
+  },
+  {
+    "id": "amit_vadi",
+    "group": "deck",
+    "full_name": "Amit Vadi",
+    "person": {
+      "name": "Amit",
+      "company": "Google DeepMind",
+      "role": "Community and developer experience",
+      "working_on": "Gemini developer events",
+      "summary": "Amit supports the Google DeepMind developer community."
+    },
+    "expected_url": "https://www.linkedin.com/in/amitvadi",
+    "context_source": "https://uk.linkedin.com/in/amitvadi",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_156"
+  },
+  {
+    "id": "peter_masone",
+    "group": "deck",
+    "full_name": "Peter Masone",
+    "person": {
+      "name": "Peter",
+      "company": "Stripe",
+      "role": "Startup partnerships",
+      "working_on": "Supporting YC founders",
+      "summary": "Peter works with startups at Stripe and attended Tulane University."
+    },
+    "expected_url": "https://www.linkedin.com/in/petermasone",
+    "context_source": "https://www.linkedin.com/in/petermasone",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h47d673da95b6c725_4_142"
+  },
+  {
+    "id": "ethan_black",
+    "group": "deck",
+    "full_name": "Ethan Black",
+    "person": {
+      "name": "Ethan",
+      "company": "Stripe",
+      "role": "Working with AI startups",
+      "working_on": "AI startup support",
+      "summary": "Ethan works with AI startups in the San Francisco Bay Area and attended the University of Utah."
+    },
+    "expected_url": "https://www.linkedin.com/in/ethanblack11",
+    "context_source": "https://www.linkedin.com/in/ethanblack11",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_183"
+  },
+  {
+    "id": "daniel_tsentsiper",
+    "group": "deck",
+    "full_name": "Daniel Tsentsiper",
+    "person": {
+      "name": "Daniel",
+      "company": "Deepgram",
+      "role": "Voice AI",
+      "working_on": "Voice agents",
+      "summary": "Daniel works with voice AI at Deepgram and attended UC Berkeley."
+    },
+    "expected_url": "https://www.linkedin.com/in/danieltsentsiper",
+    "context_source": "https://www.linkedin.com/in/danieltsentsiper",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_170"
+  },
+  {
+    "id": "adam_proschek",
+    "group": "deck",
+    "full_name": "Adam Proschek",
+    "person": {
+      "name": "Adam",
+      "company": "Deepgram",
+      "role": "Building voice AI for restaurants",
+      "working_on": "OfOne restaurant voice AI",
+      "summary": "Adam worked on OfOne, which was acquired by Deepgram, and participated in YC W23."
+    },
+    "expected_url": "https://www.linkedin.com/in/aproschek",
+    "context_source": "https://www.linkedin.com/in/aproschek",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_170"
+  },
+  {
+    "id": "pavitra_bhalla",
+    "group": "deck",
+    "full_name": "Pavitra Bhalla",
+    "person": {
+      "name": "Pavitra",
+      "company": "Superserve",
+      "role": "Building tools for agents",
+      "working_on": "Agent infrastructure",
+      "summary": "Pavitra is based in San Francisco and attended Santa Clara University."
+    },
+    "expected_url": "https://www.linkedin.com/in/pavitrabhalla",
+    "context_source": "https://www.linkedin.com/in/pavitrabhalla",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_215"
+  },
+  {
+    "id": "amit_patil",
+    "group": "deck",
+    "full_name": "Amit Patil",
+    "person": {
+      "name": "Amit",
+      "company": "Superserve",
+      "role": "Building AI tools",
+      "working_on": "Sandboxed agent API access",
+      "summary": "Amit builds AI tools at Superserve, including API access for sandboxed agents."
+    },
+    "expected_url": "https://www.linkedin.com/in/amitpatil010",
+    "context_source": "https://www.linkedin.com/in/amitpatil010",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_215"
+  },
+  {
+    "id": "ashwin_mudaliar",
+    "group": "deck",
+    "full_name": "Ashwin Mudaliar",
+    "person": {
+      "name": "Ashwin",
+      "company": "Mastra",
+      "role": "Go-to-market",
+      "working_on": "Helping developers ship agents",
+      "summary": "Ashwin works on GTM at Mastra and studied biostatistics, genomics and cancer biology at Stanford."
+    },
+    "expected_url": "https://www.linkedin.com/in/ashwinmudaliar",
+    "context_source": "https://www.linkedin.com/in/ashwinmudaliar",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_233"
+  },
+  {
+    "id": "abhi_aiyer",
+    "group": "deck",
+    "full_name": "Abhi Aiyer",
+    "person": {
+      "name": "Abhi",
+      "company": "Mastra",
+      "role": "CTO and co-founder",
+      "working_on": "TypeScript agent framework",
+      "summary": "Abhi is building a TypeScript framework for AI agents and attended UC San Diego."
+    },
+    "expected_url": "https://www.linkedin.com/in/abhi-aiyer-aa41bb42",
+    "context_source": "https://www.linkedin.com/in/abhi-aiyer-aa41bb42",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_233"
+  },
+  {
+    "id": "victor_su_ortiz",
+    "group": "deck",
+    "full_name": "Victor Su-Ortiz",
+    "person": {
+      "name": "Victor",
+      "company": "MiniMax",
+      "role": "GTM engineer and developer relations",
+      "working_on": "AI coding agents",
+      "summary": "Victor leads workshops on AI coding agents and founded AI Valley."
+    },
+    "expected_url": "https://www.linkedin.com/in/victor-su-ortiz",
+    "context_source": "https://luma.com/vpxtuh5i",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_247"
+  },
+  {
+    "id": "ming_hua",
+    "group": "deck",
+    "full_name": "Ming Hua",
+    "person": {
+      "name": "Ming",
+      "company": "Meta",
+      "role": "VP of Wearables Devices",
+      "working_on": "AI glasses",
+      "summary": "Ming leads wearable devices at Meta and studied machine learning and data mining at Simon Fraser University."
+    },
+    "expected_url": "https://www.linkedin.com/in/ming-hua-25864a4",
+    "context_source": "https://www.linkedin.com/in/ming-hua-25864a4",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_322"
+  },
+  {
+    "id": "aarush_yadav",
+    "group": "deck",
+    "full_name": "Aarush Yadav",
+    "person": {
+      "name": "Aarush",
+      "company": "The Subvocal Company",
+      "role": "Co-founder",
+      "working_on": "Silent speech interface",
+      "summary": "Aarush attended Georgia Tech and is building a wearable interface that decodes silent speech."
+    },
+    "expected_url": "https://www.linkedin.com/in/aarushyadav",
+    "context_source": "https://www.linkedin.com/in/aarushyadav",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_414"
+  },
+  {
+    "id": "arnav_kumar",
+    "group": "deck",
+    "full_name": "Arnav Kumar",
+    "person": {
+      "name": "Arnav",
+      "company": "The Subvocal Company",
+      "role": "Co-founder",
+      "working_on": "Human-computer interaction",
+      "summary": "Arnav studied computer science at Georgia Tech and co-founded a silent speech wearable startup."
+    },
+    "expected_url": "https://www.linkedin.com/in/arnav-kumar-66419027a",
+    "context_source": "https://arnavkumar.dev/",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_414"
+  },
+  {
+    "id": "omar_sekkat",
+    "group": "deck",
+    "full_name": "Omar Sekkat",
+    "person": {
+      "name": "Omar",
+      "company": "Marv Labs",
+      "role": "CEO and co-founder",
+      "working_on": "Autonomous vehicle maintenance",
+      "summary": "Omar attended Yale and is building camera headsets to assist automotive technicians."
+    },
+    "expected_url": "https://www.linkedin.com/in/osekkat",
+    "context_source": "https://www.linkedin.com/in/osekkat",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_426"
+  },
+  {
+    "id": "louis_hart_davis",
+    "group": "deck",
+    "full_name": "Louis Hart-Davis",
+    "person": {
+      "name": "Louis",
+      "company": "Marv Labs",
+      "role": "CTO and co-founder",
+      "working_on": "Autonomous vehicle maintenance",
+      "summary": "Louis studied at Ecole Polytechnique and previously built Stratolia."
+    },
+    "expected_url": "https://www.linkedin.com/in/louis-hart-davis",
+    "context_source": "https://www.joinef.com/companies/marv-labs/?pagenum=2",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h47d673da95b6c725_4_543"
+  },
+  {
+    "id": "asad_organizer",
+    "group": "deck",
+    "deck_name": "Asad",
+    "person": null,
+    "expected_url": null,
+    "blocked_reason": "Organizer is listed only as Asad; Luma says Google SWE, but no independently verified LinkedIn URL. Do not assume this is /syed-ah/.",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h6b304c68aea5a47_3_945"
+  },
+  {
+    "id": "sam_mcguire",
+    "group": "deck",
+    "deck_name": "Sam McGuire",
+    "person": null,
+    "expected_url": null,
+    "blocked_reason": "Brex representative in deck; public search found unrelated same-name people, not a verified Brex profile.",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_202"
+  },
+  {
+    "id": "luke_sine",
+    "group": "deck",
+    "deck_name": "Luke Sine",
+    "person": null,
+    "expected_url": null,
+    "blocked_reason": "Deck associates Luke with Stripe; discovered profile lists Future42. Needs identity confirmation before asserting a target URL.",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_183"
+  },
+  {
+    "id": "max_selivonchyk",
+    "group": "deck",
+    "deck_name": "Max Selivonchyk",
+    "person": null,
+    "expected_url": null,
+    "blocked_reason": "Deck spelling and Mastra affiliation are not verified against the discovered Max Selivonchik profile at Selivonchik Co.",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_233"
+  },
+  {
+    "id": "karan_marv",
+    "group": "deck",
+    "deck_name": "Karan",
+    "person": null,
+    "expected_url": null,
+    "blocked_reason": "Only first name and Marv Labs demo affiliation available; no verified surname or LinkedIn URL.",
+    "deck_source": "https://docs.google.com/presentation/d/1WfolIHSbiYNbzTfdFW26vU3bxyHt2O9NPFA8HRCGcq0#slide=id.h3a1ff3224a646b62_18_426"
+  }
+]

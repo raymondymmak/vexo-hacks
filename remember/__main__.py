@@ -1,4 +1,4 @@
-"""Remember: you remember people. They remember you.
+"""AfterHello: you remember people. They remember you.
 
     python3 -m remember --sim --demo
     python3 -m remember NUMBER
@@ -45,6 +45,8 @@ def parse_args(argv=None):
     parser.add_argument("--pace", type=float, default=None, help="seconds between demo lines or clip chunks")
     parser.add_argument("--db", default="remember.sqlite", help="SQLite file")
     parser.add_argument("--port", type=int, default=8000, help="web page port, bound to 127.0.0.1")
+    parser.add_argument("--lan", action="store_true", help="serve paired phone page on the local network")
+    parser.add_argument("--handshake", action="store_true", help="enable experimental motion handshake detection")
     args = parser.parse_args(argv)
     if args.number is None and not args.sim and not args.demo and not args.say and not args.clip and args.once:
         parser.error("--once needs --demo, --say, or --clip")
@@ -59,6 +61,7 @@ def clip_events():
     """The scripted fair, as events the offline reader emits while a clip plays."""
     events = []
     for script in SCRIPTS:
+        events.append(("double",))
         taps = set(script.get("tap_after") or [])
         for index, line in enumerate(script["lines"]):
             events.append(("text", line))
@@ -90,7 +93,7 @@ def _settle(session, timeout: float = 5) -> None:
 def main(argv=None) -> int:
     args = parse_args(argv)
     load_dotenv()
-    if os.environ.get("REMEMBER_EXTRACTOR", "").strip().lower() == "builtin":
+    if args.demo or os.environ.get("REMEMBER_EXTRACTOR", "").strip().lower() == "builtin":
         extractor = HeuristicExtractor()
     else:
         extractor = make_extractor()
@@ -99,8 +102,15 @@ def main(argv=None) -> int:
     live = bool(key) and (args.number is not None or args.sim or bool(args.clip)) and not args.demo
     # A clip with no key still flows through Pipecat; the mock supplies the script.
     needs_pipeline = args.number is not None or args.sim or bool(args.clip)
+    import secrets
+    download_secret = secrets.token_urlsafe(32)
+    from .contact_flow import ContactFlow
+    flow = ContactFlow(session, offline=args.demo or not live, secret=download_secret)
+    session.on_contact_ready = flow.enqueue
+    session.on_reset = flow.cancel_pending
     pipeline = None
     band = None
+    room = None
     pace = args.pace
     if pace is None:
         pace = 0.0 if args.once else 0.45
@@ -125,8 +135,25 @@ def main(argv=None) -> int:
                 pipeline=pipeline,
                 replay=replay,
                 listen=listen,
+                handshake=args.handshake,
             )
             band.start()
+
+        room_url = os.environ.get("REMEMBER_ROOM_URL", "").strip()
+        room_token = os.environ.get("REMEMBER_ROOM_TOKEN", "").strip()
+        if room_url and room_token and not args.demo:
+            from .room_bridge import RoomBridge
+            room = RoomBridge(session, room_url, room_token, db_path=args.db,
+                              alert=lambda item: band.room_alert(item) if band else True)
+            def contact_ready(person):
+                flow.enqueue(person)
+                room.enqueue(person)
+            def reset_pending():
+                flow.cancel_pending()
+                room.reset()
+            session.on_contact_ready = contact_ready
+            session.on_reset = reset_pending
+            room.start()
 
         if args.say:
             for line in [part.strip() for part in args.say.splitlines() if part.strip()] or [args.say.strip()]:
@@ -146,6 +173,8 @@ def main(argv=None) -> int:
 
         clip_direct = bool(args.clip) and not listen_band(band)
         if clip_direct:
+            if pipeline.live:
+                session.start()
             def run_clip():
                 import time
                 events = clip_events()
@@ -202,17 +231,31 @@ def main(argv=None) -> int:
         from .web import create_app
         import uvicorn
 
-        app = create_app(session, play_demo=play_demo_background)
-        print("Open http://127.0.0.1:%d" % args.port)
-        print("Double-tap the band for a new person. A single tap marks a moment. "
+        import secrets
+        import socket
+        token = os.environ.get("REMEMBER_PAIRING_TOKEN", "").strip() or secrets.token_urlsafe(24)
+        app = create_app(session, play_demo=None if live else play_demo_background, pairing_token=token, download_secret=download_secret)
+        if args.lan:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                    probe.connect(("192.0.2.1", 9))
+                    address = probe.getsockname()[0]
+            except OSError:
+                address = socket.gethostbyname(socket.gethostname())
+            print("Phone (same Wi-Fi): http://%s:%d/?token=%s" % (address, args.port, token))
+        print("Open http://127.0.0.1:%d%s" % (args.port, "/?token=" + token if token else ""))
+        print("Double-tap to start or end capture. A single tap marks a moment. "
               "End the conversation from the page when the room goes quiet.")
-        uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+        uvicorn.run(app, host="0.0.0.0" if args.lan else "127.0.0.1", port=args.port, log_level="warning", access_log=False)
         return 0
     finally:
+        if room is not None:
+            room.close()
         if band is not None:
             band.shutdown()
         if pipeline is not None:
             pipeline.stop()
+        flow.close()
         session.close()
 
 

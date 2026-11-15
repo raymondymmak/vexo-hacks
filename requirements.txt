@@ -7,3 +7,6 @@ av>=14
 
 # A real band over Bluetooth also needs:  python3 -m pip install bleak
 # The pretend band (--sim) does not. scripts/setup.sh clones the kit; do not pip-install it.
+
+# Local environment configuration for the standalone Dot event service.
+python-dotenv>=1,<2

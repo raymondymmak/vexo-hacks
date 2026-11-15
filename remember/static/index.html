@@ -1,348 +1,685 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Remember</title>
-  <style>
-    :root {
-      --paper: #f3efe6;
-      --ink: #1c1915;
-      --muted: #5e584f;
-      --line: #e3dacb;
-      --card: #fffdf8;
-      --green: #0e5c45;
-      --green-soft: #e5f3ec;
-      --rust: #8f3412;
-      --rust-soft: #fde8dc;
-      --shadow: 0 16px 40px rgba(48, 32, 12, 0.06);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      color: var(--ink);
-      background:
-        radial-gradient(1200px 400px at 10% -10%, #fff8ec 0%, transparent 50%),
-        var(--paper);
-      font: 16px/1.45 "Avenir Next", "Segoe UI", sans-serif;
-    }
-    header, main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
-    header {
-      display: flex;
-      justify-content: space-between;
-      gap: 24px;
-      align-items: flex-end;
-      padding: 28px 0 18px;
-      border-bottom: 1px solid var(--line);
-    }
-    .eyebrow {
-      margin: 0 0 4px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      font-size: 12px;
-      color: var(--green);
-    }
-    h1 {
-      margin: 0;
-      font: 56px/0.95 Palatino, "Iowan Old Style", Georgia, serif;
-      font-weight: 600;
-    }
-    .tag { margin: 8px 0 0; color: var(--muted); }
-    form[role="search"] { min-width: min(320px, 100%); }
-    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
-    input[type="search"], input[type="text"] {
-      width: 100%;
-      border: 1px solid #d9d0c2;
-      background: white;
-      color: var(--ink);
-      border-radius: 999px;
-      padding: 12px 16px;
-      font: inherit;
-    }
-    input:focus { outline: 2px solid var(--green); border-color: transparent; }
-    .live {
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-      align-items: center;
-      padding: 14px 0;
-    }
-    #status, #note { margin: 0; }
-    #note { color: var(--muted); font-size: 14px; }
-    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    button {
-      border: 1px solid #d4cbbd;
-      background: white;
-      color: var(--ink);
-      border-radius: 999px;
-      padding: 8px 14px;
-      font: inherit;
-      cursor: pointer;
-    }
-    button:hover { border-color: var(--ink); }
-    button.primary { background: var(--green); color: white; border-color: var(--green); }
-    button.quiet { background: transparent; }
-    .layout {
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 22px;
-      padding-bottom: 48px;
-    }
-    .now, .board {
-      background: transparent;
-    }
-    h2 {
-      margin: 0 0 10px;
-      font-size: 13px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      font-weight: 600;
-    }
-    .panel {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 16px;
-      box-shadow: var(--shadow);
-    }
-    #transcript {
-      min-height: 96px;
-      white-space: pre-wrap;
-      margin: 8px 0;
-    }
-    #moments { list-style: none; padding: 0; margin: 0 0 12px; }
-    #moments li {
-      background: var(--green-soft);
-      color: var(--green);
-      border-radius: 10px;
-      padding: 8px 10px;
-      margin-top: 6px;
-      font-size: 14px;
-    }
-    .say { display: flex; gap: 8px; }
-    .say input { border-radius: 12px; }
-    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 16px 16px 14px;
-      box-shadow: var(--shadow);
-    }
-    .card.is-new { outline: 2px solid var(--green); }
-    .card h3 {
-      margin: 0;
-      font: 28px/1.1 Palatino, Georgia, serif;
-    }
-    .meta { margin: 4px 0 8px; color: var(--muted); font-size: 13px; }
-    .summary { margin: 0 0 10px; }
-    .working { margin: 0 0 10px; }
-    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
-    .chip {
-      background: #f6f1e8;
-      border-radius: 999px;
-      padding: 3px 8px;
-      font-size: 13px;
-    }
-    .promises { list-style: none; padding: 0; margin: 0; }
-    .promises li {
-      background: var(--rust-soft);
-      color: var(--rust);
-      border-radius: 10px;
-      padding: 8px 10px;
-      margin-top: 6px;
-      font-size: 14px;
-    }
-    .moments { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
-    .empty { color: var(--muted); margin: 8px 0 0; }
-    @media (max-width: 800px) {
-      header, .live, .layout { display: block; }
-      h1 { font-size: 42px; }
-      .actions { margin-top: 12px; }
-      .layout { display: block; }
-      .now { margin-bottom: 18px; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .card.is-new { outline: 2px solid var(--green); }
-    }
-  </style>
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Remember the people you meet, the conversations you share, and what comes next.">
+  <title>AfterHello</title>
+  <link rel="icon" type="image/svg+xml" href="/static/afterhello-mark.svg">
+  <link rel="stylesheet" href="/static/remember-ui.css">
 </head>
 <body>
-  <header>
-    <div>
-      <p class="eyebrow">Vexo Open</p>
-      <h1>Remember</h1>
-      <p class="tag">You remember people. They remember you.</p>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20.5 11.5a8 8 0 0 1-11.7 7.1L4 19.8l1.2-4.4a8 8 0 1 1 15.3-3.9z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></symbol>
+      <symbol id="i-contacts" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3.5"/><circle cx="9" cy="10.5" r="2.4"/><path d="M5.6 16.5c.7-1.7 2-2.6 3.4-2.6s2.7.9 3.4 2.6M15 9.5h3M15 13h3"/></symbol>
+      <symbol id="i-map" viewBox="0 0 24 24"><circle cx="5.5" cy="6.5" r="2.5"/><circle cx="18.5" cy="8" r="2.5"/><circle cx="11" cy="18" r="2.5"/><path d="M8 6.8l8 .9M6.6 8.8l3.3 6.9M17 10.2l-4.6 5.9"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></symbol>
+      <symbol id="i-band" viewBox="0 0 24 24"><rect x="6.5" y="7" width="11" height="10" rx="3.2"/><path d="M9 7l.8-3.5h4.4L15 7M9 17l.8 3.5h4.4L15 17"/><circle cx="12" cy="12" r="1.6"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></symbol>
+      <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7.5 4.5L4 8l3.5 3.5M4 8h13M16.5 12.5L20 16l-3.5 3.5M20 16H7"/></symbol>
+      <symbol id="i-intro" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.3"/><path d="M3.5 19.5c.8-3.2 3-4.8 5.5-4.8s4.7 1.6 5.5 4.8M18.5 8v6M15.5 11h6"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13.5a4 4 0 0 0 5.7.4l2.8-2.8a4 4 0 0 0-5.7-5.7l-1.2 1.2M14 10.5a4 4 0 0 0-5.7-.4l-2.8 2.8a4 4 0 0 0 5.7 5.7l1.2-1.2"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="3"/><path d="M12 7.5v6M9.5 11L12 13.5 14.5 11M10.5 18.5h3"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.5h3L8.8 6h6.4L17 8.5h3V19H4z"/><circle cx="12" cy="13.5" r="3.2"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.7"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1-5.1-1.9 5.1-1.9zM18.5 16l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+      <symbol id="i-linkedin" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 10.5V17M8 7.4v.1M11.8 17v-6.5M11.8 13.2c0-1.6 1-2.7 2.4-2.7s2.2 1 2.2 2.6V17"/></symbol>
+      <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19.5c-4.2 1.3-4.2-2-6-2.5M15 21.5v-3.4c0-1 .1-1.5-.5-2.1 2.8-.3 5.6-1.4 5.6-6.1a4.7 4.7 0 0 0-1.3-3.3 4.4 4.4 0 0 0-.1-3.3s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6.2 0C6.7 3 5.7 3.3 5.7 3.3a4.4 4.4 0 0 0-.1 3.3 4.7 4.7 0 0 0-1.3 3.3c0 4.6 2.8 5.8 5.6 6.1-.6.6-.6 1.2-.5 2.1v3.4"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M4.5 4.5l15 15M19.5 4.5l-6.2 6.6M10.7 13.6L4.5 19.5"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z"/></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7.5l8 5.5 8-5.5"/></symbol>
+    </defs>
+  </svg>
+
+  <nav class="localnav" aria-label="AfterHello">
+    <div class="ln-inner">
+      <span class="ln-title"><img class="brand-mark" src="/static/afterhello-mark.svg" width="34" height="34" alt=""><span>AfterHello</span></span>
+      <div class="ln-links" role="tablist" aria-label="AfterHello views">
+        <button id="tab-dashboard" class="tab" role="tab" aria-selected="true" aria-controls="panel-dashboard"><svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg>Conversations</button>
+        <button id="tab-contacts" class="tab" role="tab" aria-selected="false" aria-controls="panel-contacts" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-contacts"/></svg>Contacts</button>
+        <button id="tab-transcript" class="tab" role="tab" aria-selected="false" aria-controls="panel-transcript" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>Full transcript</button>
+        <button id="tab-room" class="tab" role="tab" aria-selected="false" aria-controls="panel-room" tabindex="-1"><svg class="ic" aria-hidden="true"><use href="#i-map"/></svg>Room <span id="room-count" hidden></span></button>
+      </div>
+      <div class="ln-actions">
+        <span class="conn" id="connection-pill" role="status"><i></i><b id="connection-text">Connecting</b></span>
+        <button class="ln-link" id="tools-open" type="button" aria-haspopup="dialog"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>Controls</button>
+      </div>
     </div>
-    <form role="search" id="search-form">
-      <label for="q">Recall a person or a topic</label>
-      <input id="q" type="search" placeholder="Maya, drones, Friday" autocomplete="off">
-    </form>
+  </nav>
+  <header class="view-head wrap">
+    <h1><span id="view-title">Conversations.</span> <span id="view-subtitle" class="gray">Be present. Keep the details.</span></h1>
   </header>
-  <main>
-    <section class="live">
-      <div>
-        <p id="status">Starting.</p>
-        <p id="note"></p>
+  <main class="wrap">
+    <section class="band-bar" aria-label="Live band controls">
+      <div id="band-card" class="band">
+        <div class="band-icon"><svg class="ic" aria-hidden="true"><use href="#i-band"/></svg></div>
+        <div class="band-meta"><b id="status">Connecting to your band…</b><small id="note">Open the paired link printed on your laptop.</small></div>
       </div>
       <div class="actions">
-        <button type="button" id="new" class="primary">New person</button>
-        <button type="button" id="mark">Mark this</button>
-        <button type="button" id="end">End conversation</button>
-        <button type="button" id="demo">Play demo</button>
-        <button type="button" id="reset" class="quiet">Reset demo</button>
+        <button type="button" id="new" class="primary">Start conversation</button>
+        <button type="button" id="mark">Mark moment</button>
+        <button type="button" id="end">End &amp; save</button>
+        <button type="button" id="discard" class="quiet">Discard</button>
       </div>
     </section>
-    <div class="layout">
-      <section class="now">
-        <h2>This conversation</h2>
-        <div class="panel">
-          <p id="phase" class="meta">Idle</p>
-          <p id="transcript"></p>
-          <ul id="moments"></ul>
-          <form class="say" id="say-form">
-            <label class="visually" for="line" style="position:absolute;left:-999px">Add a line</label>
-            <input id="line" type="text" placeholder="Type a line they said" maxlength="4000">
-            <button type="submit">Add</button>
-          </form>
-        </div>
-      </section>
-      <section class="board">
-        <h2>People</h2>
-        <div id="cards" class="cards" aria-live="polite"></div>
-      </section>
-    </div>
-  </main>
-  <script>
-    const statusEl = document.getElementById("status");
-    const noteEl = document.getElementById("note");
-    const phaseEl = document.getElementById("phase");
-    const transcriptEl = document.getElementById("transcript");
-    const momentsEl = document.getElementById("moments");
-    const cardsEl = document.getElementById("cards");
-    const queryEl = document.getElementById("q");
-    let freshId = null;
+    <p id="error" role="alert" hidden></p>
+    <section id="conversation-completion" class="completion-banner result-card" aria-labelledby="completion-title" hidden>
+      <div id="completion-avatar" class="avatar result-avatar" aria-hidden="true"></div>
+      <div class="result-identity"><p id="completion-state" class="result-kicker"></p><h2 id="completion-title"></h2><p id="completion-role" class="result-role"></p><p id="completion-detail" class="result-note"></p><div id="completion-links" class="result-links"></div></div>
+      <span id="completion-icon" aria-hidden="true"></span>
+    </section>
+    <section class="panel progress-panel" aria-labelledby="processing-title">
+      <div class="section-head"><h2 id="processing-title">Conversation → contact</h2><p id="processing-subtitle" class="meta">Every step, live.</p></div>
+      <div id="processing-stages" class="processing-grid" aria-live="polite"></div>
+    </section>
+    <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
+      <div class="live-workspace">
+        <aside class="setup" aria-label="Conversation settings">
+          <h2>This conversation</h2>
+          <div><label for="existing-contact">Save this conversation to</label><select id="existing-contact"><option value="">New person</option></select><p class="meta">Choose an existing contact to add another conversation. Use End &amp; save here to keep them together.</p></div>
+          <div><label for="wearer">Which speaker is you?</label><select id="wearer"><option value="">Not identified</option></select><p class="meta">Choose your speaker before ending so promises are attributed to you.</p></div>
+        </aside>
+        <section class="thread live-thread" aria-label="Live conversation">
+          <div class="thread-head"><div class="avatar md" style="--av:#007aff"><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg></div><div class="th-id"><p id="phase">Ready to meet someone</p><p id="mode" class="meta">Microphone off</p><p id="audio-health" class="meta" aria-live="polite"></p></div></div>
+          <div id="transcript" role="log" aria-label="Live speaker-labelled dialogue" aria-live="polite"></div>
+          <ul id="moments" aria-label="Marked moments"></ul>
+          <details class="typed-input"><summary>Add a line manually</summary>
+            <label for="line-speaker">Speaker label (optional)</label><input id="line-speaker" type="text" placeholder="For example, 0">
+            <form class="say" id="say-form"><label for="line" class="visually" style="position:absolute;left:-9999px">Dialogue line</label><input id="line" type="text" placeholder="Type a line they said" maxlength="4000"><button type="submit">Add</button></form>
+          </details>
+        </section>
+      </div>
+    </section>
+    <section id="panel-contacts" role="tabpanel" aria-labelledby="tab-contacts" hidden>
+      <div class="contacts-toolbar"><div><h2>People you met <span id="contacts-count" class="gray"></span></h2><p class="meta">Their details, your notes, and what comes next.</p></div><form role="search" id="search-form"><label for="q">Recall a person or a topic</label><input id="q" type="search" placeholder="Maya, drones, Friday…" autocomplete="off"></form></div>
+      <div id="cards" class="cards" aria-live="polite"></div>
+    </section>
+    <section id="panel-transcript" role="tabpanel" aria-labelledby="tab-transcript" hidden>
+      <div class="history-toolbar"><div><label for="transcript-conversation">Choose a conversation</label><select id="transcript-conversation"><option value="live">Current conversation</option></select></div><button id="download-transcript" type="button"><svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg> Download transcript (.txt)</button></div>
+      <div class="chat">
+        <aside id="history-list" class="chat-list" aria-label="Saved conversation history"></aside>
+        <section class="thread" aria-label="Selected conversation">
+          <div class="thread-head"><div id="history-avatar" class="avatar md">R</div><div class="th-id"><b id="history-title">Current conversation</b><small id="history-subtitle">Speaker-labelled dialogue</small></div></div>
+          <p id="history-summary" hidden></p>
+          <div id="full-transcript" role="log" aria-label="Full speaker-labelled transcript" aria-live="polite"></div>
+        </section>
+      </div>
+      <p id="transcript-retention" class="meta" style="margin-top:14px">Full transcripts stay in this computer's local history. They are not included in iCloud contacts or notifications.</p>
+    </section>
+    <section id="panel-room" role="tabpanel" aria-labelledby="tab-room" hidden>
+      <div class="room-overview"><div><h2>People in the room</h2><p id="room-map-status" class="meta" role="status">Connecting to the shared room…</p></div><span id="room-map-counts" class="room-counter"></span></div>
+      <div class="room-workspace">
+        <section class="panel room-map-card" aria-label="Shared room map"><div class="room-map-tools"><span>Room overview</span><button type="button" id="room-fullscreen" class="quiet">Full screen</button></div><svg id="main-room-map" viewBox="0 0 800 460" role="img" aria-label="People and connections, also listed alongside the map"></svg><p class="meta room-map-caption">Illustrated room, not physical locations. Conversation details stay private.</p></section>
+        <section class="panel room-activity"><h2>Connections</h2><div id="main-room-connections"><p class="meta">Connections will appear when people meet.</p></div></section>
+      </div>
+      <div id="main-room-people" class="room-people"></div>
 
+      <div id="room-empty" class="empty"><h2>Your next conversation.</h2><p>Connect this band to a room to see your introductions and suggested connections here.</p><p class="meta">Details are private to the people involved. The shared projector shows only names and connections.</p></div>
+      <section id="room-panel" class="panel" hidden aria-labelledby="room-title"><h2 id="room-title">Your room connections</h2><p id="room-status" class="meta" aria-live="polite"></p><div id="room-alerts"></div></section>
+    </section>
+  </main>
+  <footer class="foot wrap"><p>Blue means the microphone is listening. Tell the other person before capture starts. Transcripts stay locally; contacts and delivery results are shown separately.</p><p>Built for VexoHacks.</p></footer>
+  <dialog id="tools-dialog" aria-labelledby="tools-title">
+    <div class="dialog-head"><h2 id="tools-title">Band &amp; demo controls</h2><button id="tools-close" class="link" type="button">Done</button></div>
+    <div class="dialog-body"><p class="meta">Use these controls to exercise the capture flow. Simulate handshake starts a conversation; it does not swap contacts with another band.</p><div class="actions"><button type="button" id="handshake">Simulate handshake</button><button type="button" id="demo">Play offline demo</button></div><p class="meta" style="margin-top:14px">The offline demo uses scripted conversations and does not send contacts or notifications.</p><div class="group-label">Local data</div><div class="actions"><button type="button" id="reset" class="quiet danger">Delete local contacts &amp; conversations</button></div></div>
+  </dialog>
+  <script src="/static/room-visualization.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const token = new URLSearchParams(location.search).get("token") || "";
+    const drafts = new Map();
+    let eventSource = null, pairingExpired = false;
+    let freshId = null, refreshVersion = 0, currentPeople = [], currentStatus = {};
+    const knownPeople = new Map();
     function el(tag, className, text) {
       const node = document.createElement(tag);
       if (className) node.className = className;
       if (text != null) node.textContent = text;
       return node;
     }
-
-    function renderStatus(status) {
-      if (!status) return;
-      const phase = status.phase === "talking" ? "In a conversation" : "Between people";
-      statusEl.textContent = status.band + " · " + phase;
-      noteEl.textContent = status.note || "";
-      phaseEl.textContent = phase;
-      transcriptEl.textContent = status.transcript || "Nothing yet. Double-tap when you meet someone, or type a line.";
-      momentsEl.replaceChildren();
-      (status.moments || []).forEach(function (moment) {
-        if (!moment) return;
-        momentsEl.appendChild(el("li", "", moment));
-      });
+    function initials(name) {
+      return String(name || "?").trim().split(/\s+/).slice(0, 2).map(word => word[0] || "").join("").toUpperCase();
     }
-
-    function renderCards(people) {
-      cardsEl.replaceChildren();
-      if (!people.length) {
-        const empty = el("p", "empty", queryEl.value
-          ? "No one matches that."
-          : "No cards yet. Play the demo, or end a conversation to save one.");
-        cardsEl.appendChild(empty);
-        return;
+    function avatarColor(name) {
+      const hash = Array.from(String(name || "")).reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 0);
+      return ["#687ba1", "#7a68a4", "#b57958", "#4c8a86", "#6b8660"][hash % 5];
+    }
+    function profilePhotoUrl(value) {
+      if (typeof value === "string" && /^\/static\/contact-photos\/[a-z0-9-]+\.(jpeg|jpg|png|webp)$/.test(value)) return value;
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" && url.hostname.endsWith(".licdn.com") && !url.username && !url.password && (!url.port || url.port === "443") ? url.href : "";
+      } catch (_) { return ""; }
+    }
+    function setAvatar(node, name, photoUrl) {
+      const safePhoto = profilePhotoUrl(photoUrl);
+      const signature = JSON.stringify([name, safePhoto]);
+      if (node.dataset.avatar === signature) return;
+      node.dataset.avatar = signature;
+      node.replaceChildren(el("span", "avatar-initials", initials(name)));
+      node.style.setProperty("--av", avatarColor(name));
+      if (safePhoto) {
+        const image = el("img", ""); image.alt = ""; image.loading = "lazy"; image.decoding = "async"; image.referrerPolicy = "no-referrer";
+        image.addEventListener("error", () => image.remove(), {once:true});
+        image.src = safePhoto; node.append(image);
       }
-      people.forEach(function (person) {
-        const card = el("article", "card" + (person.id === freshId ? " is-new" : ""));
-        card.appendChild(el("h3", "", person.name));
-        const meetings = person.conversation_count === 1 ? "1 conversation" : person.conversation_count + " conversations";
-        card.appendChild(el("p", "meta", meetings));
-        if (person.summary) card.appendChild(el("p", "summary", person.summary));
-        if (person.working_on) card.appendChild(el("p", "working", "Working on " + person.working_on));
-        if (person.cares_about && person.cares_about.length) {
-          const chips = el("div", "chips");
-          person.cares_about.forEach(function (topic) { chips.appendChild(el("span", "chip", topic)); });
-          card.appendChild(chips);
-        }
-        if (person.promises && person.promises.length) {
-          const list = el("ul", "promises");
-          person.promises.forEach(function (promise) {
-            const when = promise.by_when ? " · " + promise.by_when : "";
-            list.appendChild(el("li", "", promise.what + when));
-          });
-          card.appendChild(list);
-        }
-        if (person.key_moments && person.key_moments.length) {
-          card.appendChild(el("p", "moments", person.key_moments[0]));
-        }
-        cardsEl.appendChild(card);
-      });
     }
-
-    async function refresh() {
-      const response = await fetch("/api/state?q=" + encodeURIComponent(queryEl.value || ""));
-      const data = await response.json();
-      renderStatus(data.status);
-      renderCards(data.people || []);
+    function avatar(name, size = "", photoUrl = "") {
+      const node = el("div", "avatar " + size);
+      setAvatar(node, name, photoUrl); node.setAttribute("aria-hidden", "true"); return node;
     }
-
-    async function post(url, body) {
-      const options = { method: "POST", headers: { "Content-Type": "application/json" } };
-      if (body) options.body = JSON.stringify(body);
+    function formatWhen(value) {
+      const date = new Date(value);
+      return Number.isFinite(date.getTime()) ? date.toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}) : "Saved conversation";
+    }
+    $("tools-open").addEventListener("click", () => $("tools-dialog").showModal());
+    $("tools-close").addEventListener("click", () => $("tools-dialog").close());
+    function showError(error) {
+      $("error").textContent = error.message || String(error);
+      $("error").hidden = false;
+    }
+    async function request(url, options = {}) {
+      options.headers = { ...(options.headers || {}), ...(token ? {Authorization: "Bearer " + token} : {}) };
       const response = await fetch(url, options);
+      if (response.status === 401) {
+        pairingExpired = true;
+        if (eventSource) eventSource.close();
+        $("connection-pill").classList.remove("live");
+        $("connection-text").textContent = "Pairing required";
+        $("note").textContent = "This pairing link is missing or expired. Open the current paired link printed on your laptop.";
+        throw new Error($("note").textContent);
+      }
       if (!response.ok) {
-        let detail = "That did not work.";
-        try { detail = (await response.json()).detail || detail; } catch (error) { /* keep detail */ }
-        noteEl.textContent = detail;
+        let message = response.status === 401 ? "Open the pairing link shown on your laptop to connect this phone." : "Could not complete that action.";
+        try { const data = await response.json(); if (typeof data.detail === "string") message = data.detail; } catch (_) {}
+        throw new Error(message);
       }
       return response;
     }
-
+    async function action(url, body, method = "POST") {
+      $("error").hidden = true;
+      const response = await request(url, {method, headers: {"Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
+      await refresh();
+      return response;
+    }
+    function speakerName(speaker) {
+      if (speaker == null) return "Unidentified speaker";
+      const label = String(speaker);
+      return /^\d+$/.test(label) ? "Speaker " + (Number(label) + 1) : "Speaker " + label;
+    }
+    let dialogueSignature = "";
+    function renderDialogue(status) {
+      const turns = status.utterances || (status.transcript ? [{speaker: null, text: status.transcript, final: true}] : []);
+      if (status.phase === "processing" && !turns.length) return;
+      const signature = JSON.stringify([turns, status.wearer_speaker, status.saved_dialogue]);
+      if (signature === dialogueSignature) return;
+      dialogueSignature = signature;
+      const container = $("transcript");
+      const follow = container.scrollHeight - container.scrollTop - container.clientHeight < 70;
+      const oldScroll = container.scrollTop;
+      const groups = [];
+      for (const turn of turns) {
+        if (!turn.text) continue;
+        const prior = groups[groups.length - 1];
+        if (prior && prior.speaker === turn.speaker && prior.role === turn.role && prior.final && turn.final) prior.text += " " + turn.text;
+        else groups.push({...turn});
+      }
+      container.replaceChildren();
+      if (!groups.length) container.append(el("p", "meta", status.saved_dialogue ? "The transcript was not retained for this conversation." : "Dialogue will appear here as people speak. Speaker labels are detected automatically; choose which one is you."));
+      for (const turn of groups) {
+        const mine = turn.role === "wearer" || (turn.role == null && turn.speaker != null && status.wearer_speaker != null && String(turn.speaker) === String(status.wearer_speaker));
+        const bubble = el("div", "turn" + (mine ? " you" : turn.speaker == null ? " unknown" : "") + (!turn.final ? " interim" : ""));
+        if (!mine && turn.speaker != null) {
+          const hash = Array.from(String(turn.speaker)).reduce((n, ch) => n * 31 + ch.charCodeAt(0), 0) >>> 0;
+          bubble.style.setProperty("--speaker-color", ["#4869a9", "#8b51a3", "#a15b2b", "#247c86"][hash % 4]);
+        }
+        bubble.append(el("div", "turn-label", mine ? "You · " + speakerName(turn.speaker) : speakerName(turn.speaker)));
+        bubble.append(el("p", "turn-text", turn.text));
+        if (!turn.final) bubble.append(el("div", "turn-hint", "Transcribing…"));
+        container.append(bubble);
+      }
+      container.scrollTop = follow ? container.scrollHeight : oldScroll;
+    }
+    const transcriptHistory = new Map();
+    function transcriptTurns() {
+      const selected = $("transcript-conversation").value;
+      if (selected === "live") return currentStatus.utterances || [];
+      const conversation = transcriptHistory.get(selected);
+      return conversation ? conversation.utterances?.length ? conversation.utterances : conversation.transcript ? [{speaker:null,text:conversation.transcript,final:true,role:"unknown"}] : [] : [];
+    }
+    function updateTranscriptHistory() {
+      const selected = $("transcript-conversation").value;
+      transcriptHistory.clear();
+      const options = [new Option("Current conversation", "live")];
+      for (const person of knownPeople.values()) for (const conversation of person.conversations || []) {
+        if (!conversation.transcript && !conversation.utterances?.length) continue;
+        const id = String(conversation.id);
+        transcriptHistory.set(id, {...conversation, personName: person.name || "Someone you met", personSummary: conversation.summary || person.summary || "", personPhoto: person.photo_url || ""});
+        options.push(new Option(person.name + " · " + new Date(conversation.started_at).toLocaleString() + " · #" + id, id));
+      }
+      $("transcript-conversation").replaceChildren(...options);
+      $("transcript-conversation").value = transcriptHistory.has(selected) ? selected : (currentStatus.phase !== "talking" && options.length > 1 ? options[1].value : "live");
+      renderFullTranscript();
+    }
+    $("transcript-conversation").addEventListener("change", renderFullTranscript);
+    function turnLabel(turn) {
+      return turn.role === "wearer" || (turn.role == null && turn.speaker != null && currentStatus.wearer_speaker != null && String(turn.speaker) === String(currentStatus.wearer_speaker))
+        ? "You · " + speakerName(turn.speaker) : speakerName(turn.speaker);
+    }
+    let lastTranscriptSelection = "";
+    function chooseTranscript(id) {
+      $("transcript-conversation").value = id;
+      renderFullTranscript();
+    }
+    function renderHistoryList() {
+      const selected = $("transcript-conversation").value;
+      const entries = [{id:"live",name:"Current conversation",when:"Live",preview:(currentStatus.utterances || []).map(t=>t.text).join(" ") || "Start a conversation to capture dialogue."},
+        ...Array.from(transcriptHistory, ([id, c])=>({id,name:c.personName,when:formatWhen(c.started_at),preview:c.personSummary || c.transcript || "Saved dialogue",photo:c.personPhoto}))];
+      $("history-list").replaceChildren(el("h3", "", "CONVERSATION HISTORY"), ...entries.map(entry=>{
+        const button = el("button", "chat-item" + (entry.id === selected ? " active" : "")); button.type="button";
+        button.setAttribute("aria-pressed", String(entry.id === selected));
+        const content=el("span", "ci-main"), top=el("span", "ci-top");
+        top.append(el("b", "", entry.name)); content.append(top,el("span", "ci-prev", entry.when),el("span", "ci-prev", entry.preview));
+        button.append(avatar(entry.name,"md",entry.photo),content); button.addEventListener("click",()=>chooseTranscript(entry.id)); return button;
+      }));
+    }
+    function renderFullTranscript() {
+      const selected = $("transcript-conversation").value;
+      const conversation = transcriptHistory.get(selected);
+      const turns = transcriptTurns();
+      const container = $("full-transcript");
+      const oldScroll=container.scrollTop, follow=container.scrollHeight-container.clientHeight-oldScroll<60;
+      const changed=lastTranscriptSelection!==selected;
+      lastTranscriptSelection=selected;
+      container.replaceChildren();
+      $("history-title").textContent=conversation?.personName || "Current conversation";
+      $("history-subtitle").textContent=conversation ? formatWhen(conversation.started_at)+" · Saved locally" : (currentStatus.phase === "talking" ? "Live dialogue · Listening" : "Live dialogue · Microphone off");
+      setAvatar($("history-avatar"), conversation?.personName || "Live", conversation?.personPhoto);
+      $("history-summary").hidden=!conversation?.personSummary;
+      $("history-summary").textContent=conversation?.personSummary || "";
+      $("download-transcript").disabled = !turns.length;
+      if (!turns.length) container.append(el("p", "thread-empty", "Start a conversation to see the full dialogue here."));
+      for (const turn of turns) {
+        const mine = turnLabel(turn).startsWith("You · ");
+        const bubble = el("div", "turn" + (mine ? " you" : turn.speaker == null ? " unknown" : "") + (!turn.final ? " interim" : ""));
+        if (!mine && turn.speaker != null) bubble.style.setProperty("--speaker-color",avatarColor(turn.speaker));
+        bubble.append(el("div", "turn-label", turnLabel(turn)), el("p", "turn-text", turn.text));
+        if (!turn.final) bubble.append(el("div", "turn-hint", "Transcribing…"));
+        container.append(bubble);
+      }
+      container.scrollTop=selected === "live" && (follow || changed) ? container.scrollHeight : changed ? 0 : oldScroll;
+      renderHistoryList();
+    }
+    $('room-fullscreen').addEventListener('click', async () => {
+      try { if(document.fullscreenElement) await document.exitFullscreen(); else await document.querySelector('.room-map-card').requestFullscreen(); }
+      catch (_) { $('room-map-status').textContent = 'Full screen is unavailable in this browser.'; }
+    });
+    let roomMapBusy = false;
+    function roomSvg(tag, attrs, text) {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [key,value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+      if (text != null) node.textContent = text;
+      return node;
+    }
+    async function refreshRoomMap() {
+      if (roomMapBusy || document.hidden) return;
+      roomMapBusy = true;
+      try {
+        const response = await request('/api/room/map', {signal: AbortSignal.timeout(5000)});
+        const data = await response.json(), people = data.participants || [], byId = new Map(people.map(p=>[p.id,p]));
+        const kinds = {meeting:'Met',intro:'Introduction',match:'Shared opportunity'}, colors = {meeting:'#a1a1a6',intro:'#007aff',match:'#176b61'};
+        const edges = (data.edges || []).filter(e=>byId.has(e.source_id)&&byId.has(e.target_id)&&kinds[e.kind]);
+        $('room-map-status').textContent = data.connected ? (people.length && people.every(p=>p.simulated) ? 'Live demo · Simulated participants' : 'Live room') : data.detail;
+        $('room-map-counts').textContent = people.length + ' people · ' + edges.length + ' connections';
+        window.renderAfterHelloRoom($('main-room-map'), people, edges);
+        $('main-room-connections').replaceChildren(...edges.slice().reverse().map(e=>{const item=el('div','room-connection');item.append(el('span','meta',kinds[e.kind]),el('p','',byId.get(e.source_id).name+' ↔ '+byId.get(e.target_id).name));return item;}));
+        if (!edges.length) $('main-room-connections').append(el('p','meta','No connections yet.'));
+        $('main-room-people').replaceChildren(...people.map(p=>{const item=el('div','room-person');item.append(avatar(p.name,'sm'),el('span','',p.name),el('small','meta',p.simulated?'Simulated':'Participant'));return item;}));
+      } catch(error) { $('room-map-status').textContent = error.message + ' Showing the last available map.'; }
+      finally { roomMapBusy = false; }
+    }
+    setInterval(()=>{if (!$('panel-room').hidden) refreshRoomMap();}, 5000);
+    const views = ["dashboard", "contacts", "transcript", "room"];
+    const viewTitles = {
+      dashboard:["Conversations.","Be present. Keep the details."],
+      contacts:["Contacts.","Remember the person. And the why."],
+      transcript:["Full transcript.","Every conversation, kept like messages."],
+      room:["The room.","Your next conversation starts here."]
+    };
+    function selectView(view) {
+      if (!views.includes(view)) return;
+      for (const name of views) {
+        const selected = name === view;
+        $("tab-" + name).setAttribute("aria-selected", String(selected));
+        $("tab-" + name).tabIndex = selected ? 0 : -1;
+        $("panel-" + name).hidden = !selected;
+      }
+      $("view-title").textContent=viewTitles[view][0]; $("view-subtitle").textContent=viewTitles[view][1];
+      document.body.dataset.view = view;
+      if (view === "room") refreshRoomMap();
+      if (view === "transcript") renderFullTranscript();
+    }
+    for (const name of views) {
+      $("tab-" + name).addEventListener("click", () => selectView(name));
+      $("tab-" + name).addEventListener("keydown", event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const index=views.indexOf(name), delta=event.key === "ArrowLeft" ? -1 : 1;
+        const next=event.key === "Home" ? views[0] : event.key === "End" ? views[views.length-1] : views[(index+delta+views.length)%views.length];
+        selectView(next); $("tab-" + next).focus();
+      });
+    }
+    $("download-transcript").addEventListener("click", () => {
+      const text = transcriptTurns().map(turn => turnLabel(turn) + (turn.final ? "" : " [in progress]") + ":\n" + turn.text).join("\n\n");
+      const url = URL.createObjectURL(new Blob([text], {type:"text/plain;charset=utf-8"}));
+      const link = el("a", ""); link.href = url; link.download = "afterhello-transcript.txt";
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    function processingBlock(title, result = {}) {
+      const state = result.status || "waiting";
+      const labels = {waiting:"Waiting", pending:"Queued", active:"In progress", done:"Complete", saved:"Saved", sent:"Sent", error:"Failed", skipped:"Skipped", disabled:"Disabled", not_configured:"Not configured"};
+      const block = el("div", "processing-block " + state);
+      block.append(el("h3", "", title), el("p", "", labels[state] || state));
+      if (result.detail || result.error) block.append(el("p", "meta", result.error || result.detail));
+      return block;
+    }
+    function renderProcessing(status) {
+      const stages = [["capture", "1 · Capture (Vexo)"], ["transcription", "2 · Transcribe (Pipecat + Deepgram)"], ["extraction", "3 · Extract (OpenAI)"], ["save", "4 · Save locally"]];
+      $("processing-stages").replaceChildren(...stages.map(([id,title]) => processingBlock(title, (status.pipeline || {})[id])));
+      const person = knownPeople.get(status.pipeline?.save?.person_id);
+      for (const [id,title] of [["social","5 · Find LinkedIn"],["icloud","6 · Sync iCloud"],["ntfy","7 · Notify phone"]]) {
+        const result = person?.delivery?.[id];
+        const provider = {gemini:"Gemini",openai:"OpenAI fallback",saved:"Saved match"}[result?.provider] || "Gemini";
+        $("processing-stages").append(processingBlock(id === "social" ? title + " (" + provider + ")" : title, result));
+      }
+    }
+    function conversationLifecycle(status) {
+      // Only the current capture's save id can finish its lifecycle. An older
+      // delivery event must never replace a newer conversation's live state.
+      const pipeline = status.pipeline || {};
+      if (status.phase !== "idle" || pipeline.save?.status !== "done" || pipeline.save?.person_id == null) return null;
+      const person = knownPeople.get(pipeline.save.person_id);
+      const results = ["capture", "transcription", "extraction", "save"].map(key => pipeline[key] || {});
+      results.push(...["social", "icloud", "ntfy"].map(key => person?.delivery?.[key] || {}));
+      const failures = results.filter(result => ["error", "failed"].includes(result.status));
+      const terminal = new Set(["done", "saved", "sent", "skipped", "disabled", "not_configured"]);
+      const completed = results.every(result => terminal.has(result.status));
+      const state = failures.length ? "attention" : completed ? "finished" : "finishing";
+      return {state, person, failures};
+    }
+    function renderLifecycle(status) {
+      const lifecycle = conversationLifecycle(status);
+      const phases = {idle:"Ready to meet someone",talking:"In a conversation",processing:"Preparing contact…",error:"Something needs attention"};
+      let title = phases[status.phase] || status.phase || "Connecting";
+      $("conversation-completion").hidden = !lifecycle?.person;
+      $("processing-title").textContent = lifecycle ? "Pipeline results" : "Conversation → contact";
+      $("processing-subtitle").textContent = lifecycle?.state === "finished" ? "All steps resolved." : "Every step, live.";
+      $("new").textContent = lifecycle ? "Start new conversation" : "Start conversation";
+      if (lifecycle) {
+        const titles = {finished:"Conversation finished",finishing:"Finishing your conversation…",attention:"Saved · needs attention"};
+        title = titles[lifecycle.state];
+        const person = lifecycle.person;
+        $("conversation-completion").className = "completion-banner result-card " + lifecycle.state;
+        $("completion-state").textContent = lifecycle.state === "finished" ? "Contact saved" : lifecycle.state === "attention" ? "Contact saved · delivery needs attention" : "Contact saved · enriching details";
+        $("completion-title").textContent = person?.name || "Contact saved";
+        $("completion-role").textContent = [person?.role, person?.company].filter(Boolean).join(" · ");
+        $("completion-detail").textContent = person?.summary || person?.working_on || "Your conversation is saved.";
+        setAvatar($("completion-avatar"), person?.name, person?.photo_url);
+        $("completion-links").replaceChildren();
+        if (person?.social_url) {
+          try {
+            const url = new URL(person.social_url);
+            if (url.protocol === "https:" && /(^|\.)linkedin\.com$/.test(url.hostname)) {
+              const link = el("a", "social", "View LinkedIn ↗");
+              link.href = url.href; link.target = "_blank"; link.rel = "noopener noreferrer";
+              $("completion-links").append(link);
+            }
+          } catch (_) {}
+        }
+        $("completion-icon").textContent = lifecycle.state === "finished" ? "✓" : lifecycle.state === "attention" ? "!" : "…";
+        $("mode").textContent = "Microphone off · Saved conversation";
+        if (!pairingExpired) $("note").textContent = lifecycle.state === "finished" ? "Saved locally. Start a new conversation whenever you're ready." : lifecycle.state === "attention" ? "Saved locally. Review the failed step below; your conversation is retained." : "Microphone off. Finishing profile lookup and delivery.";
+        const conversation = lifecycle.person?.conversations?.[0];
+        if (conversation) {
+          const turns = conversation.utterances?.length ? conversation.utterances : conversation.transcript ? [{speaker:null,text:conversation.transcript,final:true,role:"unknown"}] : [];
+          renderDialogue({utterances:turns,wearer_speaker:null,saved_dialogue:true});
+        }
+      } else renderDialogue(status);
+      $("status").textContent = (status.band || "No band connected") + " · " + title;
+      $("phase").textContent = title;
+    }
+    function renderAudioHealth(status) {
+      const audio = status.audio_health || {};
+      let message = "";
+      if (status.speech_error) {
+        message = "Transcription unavailable: " + status.speech_error;
+      } else if (status.mic_on) {
+        const now = Date.now() / 1000;
+        if (!audio.packets) message = "Waiting for audio from the band…";
+        else if (now - audio.last_packet_at > 5) message = "Audio stream paused. Waiting for the band…";
+        else if (!audio.decoded_bytes) message = "Audio packets arrived, but decoding has not produced sound.";
+        else if (!audio.last_transcript_at) message = "Audio is arriving · waiting for recognized speech…";
+        else message = "Audio is arriving · last words " + Math.max(0, Math.floor(now - audio.last_transcript_at)) + "s ago";
+      }
+      if ($("audio-health").textContent !== message) $("audio-health").textContent = message;
+    }
+    setInterval(() => renderAudioHealth(currentStatus), 1000);
+    function renderStatus(status) {
+      if (!status) return;
+      if (status.phase === "talking" && currentStatus.phase !== "talking") $("transcript-conversation").value = "live";
+      currentStatus = status;
+      const phases = {idle: "Ready to meet someone", talking: "In a conversation", processing: "Preparing contact…", error: "Something needs attention"};
+      $("status").textContent = (status.band || "No band connected") + " · " + (phases[status.phase] || status.phase);
+      $("band-card").classList.toggle("listening", Boolean(status.mic_on));
+      $("note").textContent = status.note || "Start or double-tap when you're ready. End to prepare a contact.";
+      $("phase").textContent = phases[status.phase] || status.phase;
+      $("mode").textContent = status.mic_on ? "Live microphone · listening" : (status.extractor === "built-in" || status.sim ? "Offline / simulated capture" : "Microphone off");
+      renderAudioHealth(status);
+      renderProcessing(status);
+      const room = status.room || {};
+      $("room-panel").hidden = !room.status || room.status === "disabled";
+      $("room-empty").hidden = !$("room-panel").hidden;
+      $("room-count").hidden = !(room.alerts || []).length;
+      $("room-count").textContent = (room.alerts || []).length;
+      $("room-status").textContent = (room.detail || "") + (room.queued ? " · " + room.queued + " encounter(s) queued" : "");
+      $("room-alerts").replaceChildren(...(room.alerts || []).map(alert => {
+        const item = el("div", "processing-block");
+        item.append(el("h3", "", (alert.kind === "intro" ? "Introduction: " : "Suggested connection: ") + (alert.other?.name || "Someone in the room")), el("p", "", alert.reason || ""));
+        return item;
+      }));
+      renderLifecycle(status);
+      renderFullTranscript();
+      $("moments").replaceChildren(...(status.moments || []).filter(Boolean).map(m => el("li", "", m)));
+      const selected = status.wearer_speaker == null ? "" : String(status.wearer_speaker);
+      const labels = (status.speakers || []).map(s => String(typeof s === "object" ? (s.label ?? s.id) : s));
+      if (selected && !labels.includes(selected)) labels.push(selected);
+      $("wearer").replaceChildren(new Option("Not identified", ""), ...labels.map(s => new Option(speakerName(s), s)));
+      $("wearer").value = selected;
+      const busy = status.phase === "processing";
+      $("new").disabled = busy || status.phase === "talking";
+      $("handshake").disabled = busy || status.phase === "talking";
+      $("end").disabled = busy || status.phase !== "talking";
+      $("discard").disabled = busy || status.phase !== "talking";
+      $("mark").disabled = busy || status.phase !== "talking";
+      $("wearer").disabled = busy;
+      $("existing-contact").disabled = busy;
+    }
+    const fields = [["name", "Name"], ["company", "Company"], ["role", "Role"], ["email", "Email"], ["phone", "Phone"], ["social_url", "Social profile URL"], ["summary", "Conversation notes"]];
+    function renderCards(people) {
+      currentPeople = people;
+      $("contacts-count").textContent = "("+people.length+")";
+      people.forEach(person => knownPeople.set(person.id, person));
+      updateTranscriptHistory();
+      renderProcessing(currentStatus);
+      renderLifecycle(currentStatus);
+      const selectedContact = $("existing-contact").value;
+      $("existing-contact").replaceChildren(new Option("New person", ""), ...Array.from(knownPeople.values()).map(person => new Option((person.name || "Someone you met") + " · #" + person.id, String(person.id))));
+      $("existing-contact").value = knownPeople.has(Number(selectedContact)) ? selectedContact : "";
+      $("cards").replaceChildren();
+      if (!people.length) {
+        $("cards").append(el("p", "empty", $("q").value ? "No matching contacts." : "Start a conversation or play the offline demo. Your contacts will appear here."));
+        return;
+      }
+      people.forEach(person => {
+        const card = el("article", "card" + (person.id === freshId ? " is-new" : ""));
+        const cardTop=el("div","card-top"), identity=el("div","card-id");
+        identity.append(el("h3", "", person.name || "Someone you met"),el("p", "meta", [person.role, person.company].filter(Boolean).join(" · ") || "Contact details need review"));
+        cardTop.append(avatar(person.name,"",person.photo_url),identity); card.append(cardTop);
+        card.append(el("span", "badge", person.reviewed ? "Reviewed" : "Captured · editable"));
+        const delivery = person.delivery || {};
+        const deliveryPanel = el("div", "delivery");
+        deliveryPanel.setAttribute("aria-live", "polite");
+        const deliveryStages = el("div", "processing-grid");
+        for (const [channel, title] of [["social", "5 · Find LinkedIn"], ["icloud", "6 · Sync iCloud"], ["ntfy", "7 · Notify phone"]]) {
+          const result = delivery[channel] || {};
+          deliveryStages.append(processingBlock(title, result));
+        }
+        deliveryPanel.append(deliveryStages);
+        if (Number.isFinite(delivery.elapsed_seconds)) deliveryPanel.append(el("p", "meta", "Delivery processing: " + delivery.elapsed_seconds.toFixed(1) + " seconds"));
+        deliveryPanel.append(el("p", "meta", "Phone sync depends on iCloud and your notification setup. Offline demos do not sync contacts."));
+        card.append(deliveryPanel);
+        if (person.social_url) {
+          try {
+            const url = new URL(person.social_url);
+            if (["https:", "http:"].includes(url.protocol)) {
+              const social = el("a", "social", "View LinkedIn profile");
+              social.href = url.href; social.target = "_blank"; social.rel = "noopener noreferrer"; card.append(social);
+            }
+          } catch (_) {}
+        }
+        if (person.summary) card.append(el("p", "summary", person.summary));
+        if (person.email || person.phone) card.append(el("p", "meta", [person.email, person.phone].filter(Boolean).join(" · ")));
+        if (person.working_on) card.append(el("p", "working", "Working on " + person.working_on));
+        if ((person.promises || []).length) {
+          card.append(el("p", "meta", "Your captured promises — check these before importing"));
+          const list = el("ul", "promises");
+          person.promises.forEach(p => list.append(el("li", "", p.what + (p.by_when ? " · " + p.by_when : ""))));
+          card.append(list);
+        }
+        if ((person.key_moments || []).length) card.append(el("p", "moments", person.key_moments.join(" · ")));
+        const details = el("details", "");
+        details.open = drafts.has(person.id);
+        details.append(el("summary", "", "Edit / review contact"));
+        const form = el("form", "editor");
+        const draft = drafts.get(person.id) || {};
+        const inputs = {};
+        fields.forEach(([key, label]) => {
+          const id = "person-" + person.id + "-" + key;
+          const lab = el("label", "", label); lab.htmlFor = id;
+          const input = el(key === "summary" ? "textarea" : "input", "");
+          input.id = id; input.name = key;
+          if (key !== "summary") input.type = key === "email" ? "email" : key === "phone" ? "tel" : key === "social_url" ? "url" : "text";
+          input.value = draft[key] ?? person[key] ?? "";
+          input.addEventListener("input", () => {
+            drafts.set(person.id, {...(drafts.get(person.id) || {}), [key]: input.value});
+          });
+          inputs[key] = input; form.append(lab, input);
+        });
+        const promisesLabel = el("label", "", "Promises (one per line; remove any that are not yours)");
+        const promiseInput = el("textarea", "");
+        promiseInput.id = "person-" + person.id + "-promises"; promisesLabel.htmlFor = promiseInput.id;
+        promiseInput.value = draft.promiseText ?? (person.promises || []).map(p => p.what + (p.by_when ? " — " + p.by_when : "")).join("\n");
+        promiseInput.addEventListener("input", () => drafts.set(person.id, {...(drafts.get(person.id) || {}), promiseText: promiseInput.value}));
+        form.append(promisesLabel, promiseInput);
+        const buttons = el("div", "actions");
+        const save = el("button", "primary", "Save changes & mark reviewed"); save.type = "submit";
+        buttons.append(save); form.append(buttons);
+        form.addEventListener("submit", async event => {
+          event.preventDefault(); save.disabled = true;
+          try {
+            const body = Object.fromEntries(fields.map(([key]) => [key, inputs[key].value.trim()]));
+            body.promises = promiseInput.value.split("\n").filter(x => x.trim()).map(x => {
+              const existing = (person.promises || []).find(p => p.what + (p.by_when ? " — " + p.by_when : "") === x.trim());
+              return existing ? {what: existing.what, by_when: existing.by_when || ""} : {what: x.trim(), by_when: ""};
+            });
+            body.reviewed = true;
+            await request("/api/people/" + person.id, {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+            drafts.delete(person.id); $("error").hidden = true; await refresh();
+          } catch (error) { showError(error); save.disabled = false; }
+        });
+        details.append(form); card.append(details);
+        const download = el("button", "primary", "Download contact (.vcf)");
+        download.type = "button";
+        download.style.marginTop = "14px";
+        download.addEventListener("click", async () => {
+          download.disabled = true;
+          try {
+            const response = await request("/api/people/" + person.id + "/contact.vcf");
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = el("a", ""); link.href = url; link.download = (person.name || "contact").replace(/[^a-zA-Z0-9 _-]/g, "") + ".vcf";
+            document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+          } catch (error) { showError(error); }
+          finally { download.disabled = false; }
+        });
+        const recordings=(person.conversations || []).filter(c=>c.transcript || c.utterances?.length);
+        if(recordings.length) {
+          const historyButton=el("button","link","View conversation" + (recordings.length>1 ? "s ("+recordings.length+")" : ""));
+          historyButton.type="button"; historyButton.addEventListener("click",()=>{chooseTranscript(String(recordings[0].id));selectView("transcript");}); card.append(historyButton);
+        }
+        card.append(download, el("p", "meta", "Manual fallback: open the file and choose Add to Contacts. Review details whenever you need to."));
+        $("cards").append(card);
+      });
+    }
+    async function refresh() {
+      const version = ++refreshVersion;
+      try {
+        const data = await (await request("/api/state?q=" + encodeURIComponent($("q").value))).json();
+        if (version !== refreshVersion) return;
+        renderStatus(data.status); renderCards(data.people || []);
+      } catch (error) { showError(error); }
+    }
     function connect() {
-      const source = new EventSource("/api/events");
-      source.onmessage = function (event) {
-        const message = JSON.parse(event.data);
-        if (message.type === "status") renderStatus(message.status);
-        if (message.type === "card") {
-          freshId = message.person && message.person.id;
-          renderStatus(message.status);
-          refresh();
-        }
-        if (message.type === "reset") {
-          freshId = null;
-          renderStatus(message.status);
-          refresh();
-        }
+      const source = eventSource = new EventSource("/api/events" + (token ? "?token=" + encodeURIComponent(token) : ""));
+      source.onopen = () => { if (pairingExpired) { source.close(); return; } $("connection-pill").classList.add("live"); $("connection-text").textContent="Live"; refresh(); };
+      source.onmessage = event => {
+        try {
+          const message = JSON.parse(event.data);
+          if ((message.type === "card" || message.type === "delivery") && message.person) knownPeople.set(message.person.id, message.person);
+          if (message.status) renderStatus(message.status);
+          if (message.type === "card" || message.type === "delivery") { freshId = message.person && message.person.id; refresh(); }
+          if (message.type === "reset") { freshId = null; drafts.clear(); knownPeople.clear(); refresh(); }
+        } catch (error) { showError(error); }
       };
-      source.onerror = function () {
-        source.close();
-        setTimeout(connect, 1000);
+      source.onerror = () => {
+        if (pairingExpired) return;
+        $("connection-pill").classList.remove("live");
+        $("connection-text").textContent="Reconnecting";
+        $("note").textContent = "Dashboard connection interrupted. The band may still be recording. Reconnecting…";
+        refresh(); // Distinguish an expired pairing link from a temporary stream interruption.
       };
     }
-
-    document.getElementById("search-form").addEventListener("submit", function (event) {
+    for (const [id, url] of [["new", "/api/start"], ["mark", "/api/mark"], ["handshake", "/api/handshake"], ["demo", "/api/demo"]]) {
+      $(id).addEventListener("click", () => action(url).catch(showError));
+    }
+    $("end").addEventListener("click", async () => {
+      const personId = $("existing-contact").value;
+      try {
+        await action("/api/end", {person_id: personId ? Number(personId) : null});
+        $("existing-contact").value = "";
+      } catch (error) { showError(error); }
+    });
+    $("discard").addEventListener("click", () => action("/api/discard").catch(showError));
+    $("reset").addEventListener("click", () => {
+      if (confirm("Delete all saved contacts and conversations?")) action("/api/reset").catch(showError);
+    });
+    $("wearer").addEventListener("change", () => action("/api/wearer", {speaker: $("wearer").value}).catch(showError));
+    $("search-form").addEventListener("submit", event => { event.preventDefault(); refresh(); });
+    $("q").addEventListener("input", refresh);
+    $("say-form").addEventListener("submit", async event => {
       event.preventDefault();
-      refresh();
+      try {
+        await action("/api/say", {text: $("line").value, speaker: $("line-speaker").value || null});
+        $("line").value = "";
+      } catch (error) { showError(error); }
     });
-    queryEl.addEventListener("input", function () { refresh(); });
-    document.getElementById("new").addEventListener("click", function () { post("/api/new"); });
-    document.getElementById("mark").addEventListener("click", function () { post("/api/mark"); });
-    document.getElementById("end").addEventListener("click", function () { post("/api/end"); });
-    document.getElementById("demo").addEventListener("click", function () { post("/api/demo"); });
-    document.getElementById("reset").addEventListener("click", function () {
-      if (window.confirm("Clear every card from this demo?")) post("/api/reset");
-    });
-    document.getElementById("say-form").addEventListener("submit", function (event) {
-      event.preventDefault();
-      const text = document.getElementById("line").value;
-      document.getElementById("line").value = "";
-      post("/api/say", { text: text });
-    });
-
-    connect();
-    refresh();
+    connect(); refresh();
   </script>
 </body>
 </html>
